@@ -140,9 +140,7 @@ describe("allocate (§7.3.3): floors, then the leftover cents to the largest rem
     expect(allocate(total, weights)).toEqual(expected);
   });
 
-  // SPEC: §7.3 says "if every weight is 0, the shares go to the earliest lines one cent each", which does not
-  // say what happens when total exceeds the number of weights; pinned as the brief reads it: one cent each to
-  // the earliest, round robin.
+  // §7.3: "if every weight is 0, the cents go round robin from the first line (`allocate(3, [0, 0])` → `[2, 1]`)".
   test("allocate(3, [0, 0]) → [2, 1]: all weights 0, one cent each to the earliest, round robin", () => {
     expect(allocate(3, [0, 0])).toEqual([2, 1]);
   });

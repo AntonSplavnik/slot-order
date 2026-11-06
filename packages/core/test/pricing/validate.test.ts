@@ -306,4 +306,12 @@ describe("priceCart: promo codes", () => {
     const lines = [line("burger-menu"), AYRAN];
     expect(priceCart(seedMenu, { lines, promoCode: "" })).toEqual(priceCart(seedMenu, { lines }));
   });
+
+  test("a code that is empty after trimming ('  ') means no promo: priced exactly like none", () => {
+    const lines = [line("burger-menu"), AYRAN];
+    const receipt = priceCart(seedMenu, { lines, promoCode: "  " });
+    expect(receipt.promoCode).toBeUndefined();
+    expect(receipt.discountCents).toBe(0);
+    expect(receipt).toEqual(priceCart(seedMenu, { lines }));
+  });
 });

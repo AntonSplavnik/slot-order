@@ -82,7 +82,8 @@ production check, CV.
   `OrderSummary` and `StaffOrder` are M4's, where they are used.
 - **Fixture:** `packages/core/test/fixtures/menu.ts` is the Goldhahn menu as `core` sees it; M3's `seed.sql` is written
   from it, and a `test:db` test compares the two (so the seed and the fixture cannot drift).
-- **Demo:** a test prints the §7.4 receipt (lines, VAT per rate, total).
+- **Demo:** the two worked receipts of §7.4 pinned to the cent by tests that read as sentences in `pnpm test`'s
+  verbose output (changed from "a test prints the receipt": a printing test proves nothing; the pinned one does).
 
 ### M3: Supabase schema, functions, seed
 - **Tests first** (`apps/api/test/db/`, own Vitest config, `globalSetup` runs `supabase db reset`): migrations apply;

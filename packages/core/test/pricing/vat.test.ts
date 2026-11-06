@@ -94,8 +94,8 @@ describe("worked example 1 (§7.4): one burger-menu, no promo", () => {
 });
 
 describe("worked example 2 (§7.4): one burger-menu with HAHN10", () => {
-  // SPEC: §7.4 gives the exact shares as 641.41 / 284.16 / 235.43; they are 641.39 / 284.16 / 235.45
-  // (1161 × 790 / 1430 etc.). The integers 641 / 284 / 236 (the cent to the drink) are unaffected.
+  // §7.4: 1161 over 790 / 350 / 290 → 641.39 / 284.16 / 235.45; floors 1160, the one cent to the drink (.45)
+  // → 641 / 284 / 236.
   test("discount 129, the line's discountCents 129, total 1161", () => {
     const receipt = priceCart(seedMenu, { lines: [line("burger-menu")], promoCode: "HAHN10" });
     expect(receipt).toMatchObject({
@@ -220,6 +220,13 @@ describe("VAT summary (§7.4)", () => {
       { category: "drink", rate: 19, grossCents: 261, netCents: 219, vatCents: 42 },
     ]);
     expect(receipt.vat).toEqual([vatLine(19, 1290, 1084, 206)]);
+  });
+
+  test("a part and a summary line of gross 0 are kept: WELCOME3 on one ayran → total 0, drink 19 % 0 / 0 / 0", () => {
+    const receipt = priceCart(seedMenu, { lines: [line("ayran")], promoCode: "WELCOME3" });
+    expect(receipt.totalCents).toBe(0);
+    expect(receipt.lines[0]?.parts).toEqual([drink(0, 0, 0)]);
+    expect(receipt.vat).toEqual([vatLine(19, 0, 0, 0)]);
   });
 });
 

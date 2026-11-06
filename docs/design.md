@@ -358,6 +358,9 @@ code).
   up, in integer arithmetic (no floating point).
 - The receipt's **VAT summary** has one line per rate present, ascending, each the sum of the parts at that rate
   (`{ rate, grossCents, netCents, vatCents }`), never recomputed from the totals, so `Σ gross = total` by construction.
+  A part or summary line whose gross is 0 is kept (a fully discounted order still shows its rates). A combo that
+  references a component missing from the menu is a fault of the menu, not of the cart: `priceCart` throws a plain
+  `Error`, which the API answers as `internal`.
 
 **Worked example** (a test): one Burger Menu at 12.90, no promo. Standalone values: burger 7.90, fries 3.50, Cola 2.90
 (sum 14.30). Allocation: burger 1290 × 790 / 1430 = 712.66, fries 315.73, drink 261.61 → floors 712 + 315 + 261 = 1288,
