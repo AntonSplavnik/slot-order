@@ -42,7 +42,9 @@ The slot rules (`packages/core/test/slots/`, 145 tests) cover the grid on both 2
 holds, the booking horizon in Berlin days, every reason and error in its order of precedence, and the config schema.
 The pricing rules (`packages/core/test/pricing/`, 150 tests) cover validation and its order, integer VAT rounding,
 discounts spread by largest remainder, combo splits, the VAT summary, two worked receipts and a seeded property test;
-the order transitions and pickup codes (`test/orders/`, 77 tests). ```sh
+the order transitions and pickup codes (`test/orders/`, 77 tests).
+
+```sh
 pnpm test:db     # against local Supabase: migrations, seed, the SQL functions, RLS, and the 50-parallel reservation
 ```
 
