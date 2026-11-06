@@ -1,0 +1,527 @@
+# SlotOrder — Design
+
+**Date:** 2026-11-06 (draft for review; nothing built yet)
+**Status:** the spec for milestones M0–M6 in `docs/plan.md`. A bare § means a section of this file. This file is the
+source of truth: when the implementation has to deviate, the deviation is written back here in the same commit.
+
+## 1. Purpose
+
+SlotOrder is a small pre-order system for a fictional halal chicken restaurant, **Goldhahn** (Berlin): a customer picks
+items from the menu, picks a 15-minute pickup slot, pays online and gets a QR code; staff see the orders per slot and scan
+the code at pickup.
+
+It is a **work sample**, built to show two things in the stack a Berlin restaurant group uses in-house (Hono on
+Cloudflare Workers, Supabase, Stripe, Next.js with Tailwind):
+
+1. productive work in that stack, most of which was new to the author;
+2. **tested time-slot and pricing logic**, built with an AI-assisted workflow in which the author stays in control of what
+   the agents write (spec first, test first, review gate per milestone, `README` section "What the agent got wrong and
+   what I changed").
+
+It is not a product. Scope is deliberately small: a tested core with a short README beats a half-built full app.
+
+**Success criteria**
+- `pnpm test` runs the slot, pricing, order-state and API suites in under a minute with no network access.
+- `pnpm test:db` proves against a real Postgres that **50 parallel reservations of the last free place produce exactly one
+  winner**, and that the slot counts stay consistent after holds expire.
+- On a phone: order → pay with a Stripe test card → QR code; the staff board shows the order in its slot; opening the QR
+  code's link marks it picked up.
+- CI green on every push; the API live on Cloudflare Workers, the web app live on Cloudflare, the database on Supabase.
+- The README's "What the agent got wrong" section has real entries with commit links.
+
+## 2. Scope
+
+### In
+- A menu with items, option groups (min/max choices, price deltas) and fixed combos (§7).
+- Pickup slots from opening hours: 15-minute slots, capacity in items, prep time, cut-off, holds, a booking horizon (§6).
+- Pricing in integer cents with German VAT split per rate, one rounding rule, and promo codes (§7).
+- Order lifecycle `held → paid → ready → picked_up` with `expired` and `cancelled` (§8).
+- Stripe Checkout in test mode with an idempotent webhook (§9).
+- A Hono API on Cloudflare Workers with a Cron Trigger that releases expired holds (§10).
+- A Next.js customer flow (menu → slot → pay → QR) and a staff board with QR check-in (§11).
+- No overbooking under concurrency, enforced in Postgres (§5, §13).
+- GitHub Actions: checks on every push and pull request; deploys from `main` (§14).
+
+### Not in (see §16 Later)
+- Customer accounts. An order is addressed by its UUID (unguessable) and its pickup code.
+- Real staff authentication. Staff endpoints take one shared token (`STAFF_TOKEN`).
+- Eat-in orders, table service, delivery. Everything is pickup.
+- Refund UI, partial refunds, order edits after payment.
+- Menu or opening-hours administration. Both come from `supabase/seed.sql`.
+- A POS adapter (the plan's M7; only if time is left after M6).
+- German UI, multiple restaurants, inventory, email or SMS, rate limiting.
+
+## 3. Key decisions
+
+| Topic | Decision |
+|---|---|
+| Restaurant | Fictional: **Goldhahn**, a made-up halal chicken menu (§5 Seed). No real company's name, logo, menu, photos or texts anywhere in the repo. |
+| Money | Integer cents everywhere. Menu prices are **gross** (VAT included), as German menus show them. VAT is derived per line (§7.4). |
+| VAT | Germany, 2026: **food 7 %** (since 2026-01-01 also when eaten in, Steueränderungsgesetz 2025), **drinks 19 %**. Each menu item has a `vat_category` of `food` or `drink`; the rates sit in one table in `core` (§7.4, §17). |
+| Capacity | Counted in **items** per slot (a kitchen cooks portions, not orders). Default 20 items per 15 minutes. |
+| Slot grid | Computed in `core` from the opening hours, in instants (UTC milliseconds), 15 minutes apart; wall-clock times only for labels and for the opening hours themselves. So DST days have fewer or more slots and never a missing or duplicated one (§6.3). |
+| Slot rows | `slots` rows are created lazily by the reservation function. A slot without a row has `capacity − 0` available. The database enforces capacity; `core` enforces everything else (grid, prep time, cut-off, horizon). |
+| No overbooking | One SQL function, `place_hold`, reserves the items and inserts the order in **one transaction** with a single conditional `UPDATE … WHERE booked + n <= capacity`. Proven by `pnpm test:db` (§13). |
+| Holds | A hold lasts 10 minutes. `slots.booked` counts held and paid items alike. A Workers Cron Trigger runs every minute: `release_expired_holds()` in SQL, then the released Stripe sessions are expired best-effort (§8.3). |
+| Stripe vs. hold | A Checkout Session cannot expire in under 30 minutes (§17), so our 10-minute hold is shorter than Stripe's. The cron expires the session when the hold ends; if a customer still pays in the gap, the webhook tries to reserve the slot again and refunds if it cannot (§8.3, §9.3). |
+| Webhook | Idempotent: `stripe_events.id` is the primary key; the event is inserted before it is processed; a duplicate answers 200 and does nothing. Every transition is also a conditional `UPDATE` (`WHERE status = 'held'`), so a double delivery cannot pay an order twice (§9.2). |
+| Trust boundary | Only the Worker talks to Supabase, with the **service-role key** kept as a Worker secret. RLS is enabled on every table with **no policies**, so the anon key reads nothing. The browser never holds a Supabase key (§4). |
+| Staff | `Authorization: Bearer <STAFF_TOKEN>` on `/staff/*`. The staff pages keep the token in `localStorage`. A deliberate simplification, named as such in the README. |
+| Pickup code | 8 characters from Crockford's base32 alphabet (no `I`, `L`, `O`, `U`), generated when the order is created, shown only once the order is paid. The QR code encodes the staff pickup URL `/staff/pickup?code=…`, so staff scan it with the phone's camera app; no in-app scanner. |
+| Price snapshot | An order stores its priced lines and receipt as JSON, so later menu changes never alter a past order. |
+| Time | `date-fns` 4 with `@date-fns/tz` in `core` (pure JS, runs on Workers, Node and browsers). `now` is injected everywhere, never read from the clock inside `core`. |
+| Web hosting | Next.js on Cloudflare Workers via `@opennextjs/cloudflare`. If it fights back in M6, Vercel is the fallback and the spec is updated. |
+| Language | English everywhere (code, docs, UI). Menu item names carry German flavour (*Halbes Hähnchen*). |
+| Tooling | pnpm workspace, strict TypeScript, Biome for lint and format, Vitest everywhere, Zod 4 schemas in `core` for every API shape. No build step for `core`: `api` and `web` import its `src/` directly. |
+
+## 4. Architecture
+
+```
+slot-order/
+  packages/core/    pure TypeScript: slot rules, pricing, order transitions, Zod schemas, pickup codes. No I/O.
+  apps/api/         Hono on Cloudflare Workers: routes, Supabase repository, Stripe, webhook, cron handler
+  apps/web/         Next.js (App Router) + Tailwind: customer flow and staff board; talks only to the API
+  supabase/         config.toml, migrations/*.sql, seed.sql (the Goldhahn menu and settings)
+  docs/             design.md (this file), plan.md, handoffs/
+  .github/          workflows/ci.yml
+```
+
+```
+phone / laptop ── Next.js on Cloudflare (apps/web) ── fetch ──▶ Hono Worker (apps/api)
+                                                                 │  supabase-js, service role
+                                                                 ├────────────────────────▶ Supabase Postgres
+                                                                 │        RPC: place_hold, release_hold, reserve_slot,
+                                                                 │             release_expired_holds
+                                                                 ├── Stripe SDK (fetch) ──▶ Stripe (test mode)
+                                                                 ◀── POST /webhooks/stripe ──┘
+                                                                 └── Cron Trigger, every minute → release expired holds
+```
+
+### Units
+- **`packages/core`** (`@slot-order/core`): everything that can be tested without I/O. Exports `src/index.ts`. Its
+  `tsconfig` has `types: []`, so any Node API used there fails the typecheck. Depends only on `zod`, `date-fns` and
+  `@date-fns/tz`.
+- **`apps/api`** (`@slot-order/api`): the only unit that talks to the database and to Stripe. A `Repository` interface
+  (`src/repo/types.ts`) with a Supabase implementation and an in-memory fake used by the route tests. A `Payments`
+  interface with a Stripe implementation and a fake. Routes stay thin: validate with the `core` schemas, call `core`,
+  call the repository, map errors.
+- **`apps/web`** (`@slot-order/web`): screens only. It imports `core` for the schemas and for pricing the cart locally
+  (the server re-prices on order), and calls the API through one small client (`src/lib/api.ts`). `next.config`
+  lists `@slot-order/core` in `transpilePackages`.
+- **`supabase/`**: plain SQL migrations (numbered), the SQL functions, the seed. Applied locally with `supabase db reset`,
+  to the cloud with `supabase db push` from CI.
+
+### Technology
+| Part | Choice |
+|---|---|
+| Language | TypeScript 5, strict, `noUncheckedIndexedAccess`, Bundler resolution |
+| Schemas | Zod 4 |
+| API | Hono 4 on Cloudflare Workers, `wrangler` 4 (a devDependency, no global install) |
+| Database | Supabase (Postgres 17), `supabase-js` 2, Supabase CLI for local dev and migrations |
+| Payments | `stripe` (stripe-node) with the fetch HTTP client and the SubtleCrypto provider for webhook signatures (§9.2) |
+| Web | Next.js 16 (App Router), Tailwind 4, `qrcode` for the QR code as SVG, `@opennextjs/cloudflare` for deployment |
+| Time | `date-fns` 4, `@date-fns/tz` |
+| Tests | Vitest; Hono's `app.request()` for routes; `supabase-js` and `postgres` (porsager) against local Supabase for `test:db` |
+| Lint/format | Biome 2 (same config as the author's other projects: spaces, line width 100) |
+| CI/CD | GitHub Actions |
+
+## 5. Data model
+
+All tables in schema `public`, RLS enabled with no policies (§3 Trust boundary). Times are `timestamptz`. Money columns
+are `integer` cents.
+
+### `settings` — one row, `id = 1`
+| Column | Type | Note |
+|---|---|---|
+| `timezone` | text | `Europe/Berlin` |
+| `slot_minutes` | int | 15 |
+| `capacity_per_slot` | int | 20 (items) |
+| `prep_minutes` | int | 20 |
+| `cutoff_minutes` | int | 5 |
+| `hold_minutes` | int | 10 |
+| `max_days_ahead` | int | 7: today and the next 6 days can be booked |
+| `opening_hours` | jsonb | `{"mon":[["11:00","22:00"]], …, "sun":[]}`; a day may have several ranges (a lunch break) |
+
+`core` reads this row as a `SlotConfig` (Zod schema). The API reads it once per request.
+
+### `menu_items`
+| Column | Type | Note |
+|---|---|---|
+| `id` | text PK | a slug: `chicken-burger` |
+| `name`, `description` | text | |
+| `price_cents` | int | gross |
+| `vat_category` | text | `food` or `drink` (CHECK) |
+| `kind` | text | `item` or `combo` (CHECK) |
+| `sort` | int | menu order |
+| `active` | bool | inactive items are not listed and cannot be ordered |
+
+### `option_groups` — `id` text PK, `item_id` → `menu_items`, `name`, `min_choices`, `max_choices`, `sort`.
+Only `kind = 'item'` rows have groups; combos have none (CHECK by trigger is overkill: the seed and the pricing tests keep it so).
+
+### `options` — `id` text PK, `group_id` → `option_groups`, `name`, `price_delta_cents` (may be 0 or negative), `sort`.
+
+### `combo_components` — `combo_id` → `menu_items`, `item_id` → `menu_items`, `quantity` int; PK `(combo_id, item_id)`.
+
+### `promo_codes` — `code` text PK (upper case), `kind` (`percent` or `fixed`), `value` int (0–100, or cents), `active` bool.
+
+### `slots`
+| Column | Type | Note |
+|---|---|---|
+| `starts_at` | timestamptz PK | the slot's instant |
+| `capacity` | int | copied from `settings` when the row is created (§3 Slot rows) |
+| `booked` | int | items held or paid; `CHECK (booked >= 0 AND booked <= capacity)` |
+
+### `orders`
+| Column | Type | Note |
+|---|---|---|
+| `id` | uuid PK | `gen_random_uuid()` |
+| `status` | text | `held`, `paid`, `ready`, `picked_up`, `expired`, `cancelled` (CHECK) |
+| `slot_start` | timestamptz | → `slots` |
+| `customer_name` | text | 1–60 characters |
+| `lines` | jsonb | the priced lines (`PricedLine[]`, §7.5) |
+| `receipt` | jsonb | the `Receipt` (§7.5): subtotal, discount, total, VAT per rate |
+| `item_count` | int | what was reserved in the slot |
+| `total_cents` | int | copied from the receipt for listing |
+| `promo_code` | text, null | |
+| `pickup_code` | text, unique | §3 Pickup code |
+| `stripe_session_id` | text, unique, null | |
+| `stripe_payment_intent_id` | text, null | from the completed session |
+| `hold_expires_at` | timestamptz, null | set while `held` |
+| `cancel_reason` | text, null | `stripe_failed`, `session_expired`, `refunded_slot_full` |
+| `created_at`, `paid_at`, `ready_at`, `picked_up_at`, `expired_at`, `cancelled_at` | timestamptz | |
+
+Indexes: `(slot_start)`, `(status, hold_expires_at)` for the cron.
+
+### `stripe_events` — `id` text PK (Stripe's `evt_…`), `type` text, `order_id` uuid null, `received_at` timestamptz.
+
+### SQL functions (`supabase/migrations/0002_functions.sql`)
+- `reserve_slot(p_starts_at timestamptz, p_items int, p_capacity int) returns slots`: `INSERT … ON CONFLICT DO NOTHING`,
+  then `UPDATE slots SET booked = booked + p_items WHERE starts_at = p_starts_at AND booked + p_items <= capacity RETURNING *`.
+  No row updated → `RAISE EXCEPTION 'slot_full'`. The row lock of the `UPDATE` serialises concurrent callers; the
+  `WHERE` makes the losers fail instead of overbooking.
+- `place_hold(p_order jsonb, p_capacity int) returns orders`: calls `reserve_slot` for the order's slot and item count,
+  then inserts the order with `status = 'held'` and `hold_expires_at = now() + hold`. One transaction: a failed insert
+  rolls the reservation back.
+- `release_slot(p_starts_at, p_items)`: `booked = booked − p_items` (the CHECK keeps it ≥ 0).
+- `release_hold(p_order_id uuid, p_status text, p_reason text) returns orders`: `UPDATE orders … WHERE id = … AND
+  status = 'held'` to `expired` or `cancelled`, and `release_slot` for its items. No row → returns null (already
+  moved on; callers treat that as done).
+- `release_expired_holds(p_now timestamptz default now()) returns setof orders`: every `held` order with
+  `hold_expires_at < p_now` through
+  `release_hold(…, 'expired')`, returned so the Worker can expire their Stripe sessions.
+- `reserve_for_paid(p_order_id uuid, p_capacity int) returns orders`: the webhook's second chance (§8.3): for an
+  `expired` order, `reserve_slot` again and set `paid`. Raises `slot_full` when the slot has filled up.
+
+The functions are plain `LANGUAGE plpgsql` without `SECURITY DEFINER`: the Worker calls them as the service role.
+`REVOKE EXECUTE … FROM anon, authenticated` keeps them off the public PostgREST API, as RLS keeps the tables.
+
+### Seed (`supabase/seed.sql`)
+Settings: Mon–Sat 11:00–22:00, Sun closed; 15-minute slots; 20 items per slot; prep 20 min; cut-off 5 min; hold 10 min;
+7 days ahead.
+
+| Item | Gross | VAT | Options |
+|---|---|---|---|
+| Halbes Hähnchen (half chicken) | 8.90 | food | — |
+| Chicken Burger | 7.90 | food | Size (1 of: regular +0, large +1.50); Sauce (0–2 of: garlic, chili, honey mustard, +0) |
+| Chicken Wings, 6 pieces | 6.50 | food | Heat (1 of: mild, hot) |
+| Fries | 3.50 | food | Size (1 of: regular +0, large +1.00) |
+| Coleslaw | 2.90 | food | — |
+| Ayran | 2.50 | drink | — |
+| Cola 0.33 l | 2.90 | drink | — |
+| Water 0.5 l | 2.50 | drink | — |
+| **Burger Menu** (combo) | 12.90 | split | Chicken Burger + Fries + Cola (standalone 14.30) |
+| **Wings Menu** (combo) | 11.90 | split | Chicken Wings + Fries + Cola (standalone 12.90) |
+
+Promo codes: `HAHN10` (10 %), `WELCOME3` (3.00 off), `OLD` (inactive).
+
+## 6. Slot rules (`packages/core/src/slots/`)
+
+### 6.1 Definitions
+- A **day** is a calendar date in the restaurant's timezone.
+- The **grid** of a day: for each opening range `[open, close)` of that weekday, slots start at `open`, `open + slot`,
+  … as long as `start + slot <= close`. Computed in instants: `open` and `close` are converted to instants with
+  `@date-fns/tz` (`TZDate`), the walk adds `slot_minutes` in milliseconds. "24:00" as a closing time means midnight of
+  the next day.
+- **Earliest start** = the first grid slot whose start is `>= now + prep_minutes` ("rounded up to the next slot start").
+- **Cut-off**: a slot can be ordered while `now <= start − cutoff_minutes`.
+- **Horizon**: days from today to today + `max_days_ahead − 1` can be booked.
+- **Available** = `capacity − booked` (booked includes holds).
+- A slot is **bookable** for `n` items when it is on the grid, `start >= earliest`, `now <= start − cutoff`,
+  and `available >= n`.
+
+### 6.2 Functions (pure; `now` and the config are arguments)
+- `slotGrid(config, day): Slot[]` — the day's slots: `{ start: Date, label: "12:30" }`.
+- `dayStatus(config, day, now): 'open' | 'closed' | 'past' | 'too_far'`.
+- `listSlots(config, day, now, booked: Map<startMs, number>): SlotAvailability[]` — every slot of the day with
+  `available`, `bookable` and, when not bookable, a `reason` of `past`, `too_soon`, `cutoff` or `full`.
+- `checkSlot(config, start, items, now, booked): ok | SlotError` — the rule used by `POST /orders`, in this order:
+  `closed_day`, `too_far`, `slot_not_on_grid`, `slot_past_cutoff`, `slot_too_soon`, `too_many_items` (more items than a
+  slot's capacity can ever hold), `slot_full`.
+- `holdExpiry(config, now): Date`.
+
+### 6.3 DST
+Because the grid is walked in instants, 2026-03-29 (clocks forward) and 2026-10-25 (clocks back) need no special code;
+they need tests:
+- With the seed hours (11:00–22:00) both days have 44 slots, 15 minutes apart, labelled 11:00 … 21:45.
+- With a 00:00–24:00 test config, 2026-03-29 has 92 slots and 2026-10-25 has 100; no label is missing and no instant
+  repeats (the two "02:xx" hours in October are different instants with the same labels, which is right: the kitchen
+  works both of them).
+- An opening time that does not exist on the day (02:30 on 2026-03-29) is resolved by `TZDate` by moving forward; an
+  ambiguous one (02:30 on 2026-10-25) resolves to its first occurrence. Both are pinned by a test, so a library upgrade
+  that changes them is noticed. (If M1 finds `TZDate` behaves differently, the spec changes to what it does.)
+- Earliest start across the boundary: at 2026-03-29 00:50 Berlin with prep 20 and a 24-hour config, the earliest slot is
+  01:15; at 01:50 it is 03:15 (02:xx does not exist).
+- `dayStatus` and the horizon use Berlin days, with a test at 23:30 and 00:30 Berlin time while the process runs in UTC.
+
+### 6.4 Closed and full days
+`GET /slots` never answers an empty list without saying why: `status` is `closed`, `past` or `too_far`, or `open` with
+every slot carrying `bookable` and a `reason`. `POST /orders` answers the `SlotError` codes above (§12).
+
+## 7. Pricing rules (`packages/core/src/pricing/`)
+
+### 7.1 Input
+A cart: `lines: { itemId, quantity (1–20), optionIds: string[] }[]` (1–30 lines), an optional `promoCode`, the
+`Menu` (items, groups, options, combos, promo codes) and the VAT rate table.
+
+### 7.2 Validation (`CartError`)
+`unknown_item`, `item_inactive`, `unknown_option` (not one of the item's groups' options), `option_count` (a group's
+choices outside `[min, max]`), `options_on_combo`, `quantity_out_of_range`, `too_many_lines`, `promo_invalid` (unknown
+or inactive), `empty_cart`.
+
+### 7.3 Amounts
+1. **Unit gross** of a line = `price_cents` + the sum of the chosen options' `price_delta_cents` (≥ 0 after deltas; the
+   seed never goes negative, a test pins that a negative unit is an `invalid_price` error).
+2. **Line gross** = unit gross × quantity. **Subtotal** = the sum of line gross amounts.
+3. **Discount**: `percent` → `round(subtotal × value / 100)`; `fixed` → `min(value, subtotal)`. Never below 0, never
+   above the subtotal. The discount is **spread over the lines in proportion to their line gross**, by largest remainder
+   (floor each share, then hand the leftover cents to the largest fractional remainders, ties to the earlier line), so
+   the sum of the lines' discounts equals the discount exactly. A line's **discounted gross** = line gross − its share.
+4. **Total** = subtotal − discount = the sum of discounted gross amounts.
+
+### 7.4 VAT
+- Rates: `{ food: 7, drink: 19 }` (§3 VAT). An option delta takes its item's category.
+- A **plain item line** has one rate: its discounted gross is taxed at its category's rate.
+- A **combo line** is split into **parts** before VAT: the discounted gross is allocated to the components in proportion
+  to their standalone value (component `price_cents` × component quantity × line quantity), by largest remainder as
+  above; parts of the same rate are summed, so a combo yields at most one part per rate.
+- **Per part**: `net = round(gross × 100 / (100 + rate))`, `vat = gross − net`. Rounding is to the nearest cent, halves
+  up, in integer arithmetic (no floating point).
+- The receipt's **VAT summary** is the sum of the parts per rate (`{ rate, net, vat, gross }`), never recomputed from the
+  totals, so `Σ gross = total` by construction.
+
+**Worked example** (a test): one Burger Menu at 12.90, no promo. Standalone values: burger 7.90, fries 3.50, Cola 2.90
+(sum 14.30). Allocation: burger 1290 × 790 / 1430 = 712.66, fries 315.73, drink 261.61 → floors 712 + 315 + 261 = 1288,
+two cents left → fries (.73) and burger (.66) → **713, 316, 261**. Parts: food 1029 → net 962, VAT 67; drink 261 →
+net 219, VAT 42. Receipt: subtotal 1290, discount 0, total 1290, VAT 7 % 67 on 1029, VAT 19 % 42 on 261.
+
+### 7.5 Output
+`Receipt { lines: PricedLine[], subtotalCents, discountCents, promoCode?, totalCents, vat: VatLine[] }` where
+`PricedLine { itemId, name, optionNames, quantity, unitGrossCents, lineGrossCents, discountCents, parts: { rate, grossCents, netCents, vatCents }[] }`.
+`priceCart(menu, rates, cart): Receipt` throws `CartError`. The same function runs in the browser (instant totals) and in
+the Worker (the amount that goes to Stripe).
+
+## 8. Order lifecycle (`packages/core/src/orders/`)
+
+### 8.1 States
+`held` (slot reserved, payment pending) → `paid` → `ready` → `picked_up`; `expired` (hold timed out) and `cancelled`.
+The cart before an order exists lives only in the browser (the handoff's `draft`); nothing is stored until a slot is held.
+
+### 8.2 Transitions
+| From | To | Trigger | Side effects |
+|---|---|---|---|
+| — | `held` | `POST /orders` | price with `core`; `place_hold` (atomic); Stripe Checkout Session; store its id and URL. Stripe failure → `release_hold(cancelled, stripe_failed)` and `502 payment_unavailable`. |
+| `held` | `paid` | webhook `checkout.session.completed` with `payment_status = paid` | `paid_at`, payment intent id; the pickup code becomes visible |
+| `held` | `expired` | cron: `release_expired_holds()` | slot released; then `checkout.sessions.expire` per order, best-effort |
+| `held` | `cancelled` | webhook `checkout.session.expired` while still held: a safety net for a cron that did not run (Stripe's own 30-minute expiry; normally the order is already `expired` and the event is a no-op) | slot released, reason `session_expired` |
+| `expired` | `paid` | webhook `checkout.session.completed` for an expired order (the race in §8.3) | `reserve_for_paid`: slot reserved again |
+| `expired` | `cancelled` | the same webhook when `reserve_for_paid` raises `slot_full` | `refunds.create` on the payment intent, reason `refunded_slot_full`; still 200 to Stripe |
+| `paid` | `ready` | staff board | `ready_at` |
+| `paid`, `ready` | `picked_up` | `POST /staff/pickup` with the code | `picked_up_at` |
+
+`canTransition(from, to)` in `core` is the single table the API and the SQL functions agree on; every DB update carries
+`WHERE status = <from>`, and zero rows updated answers `409 invalid_transition` (or is a no-op for webhooks, which must
+answer 200).
+
+**Invariant** (tested in `test:db`): for every slot, `booked = Σ item_count` of its orders in `held`, `paid`, `ready`,
+`picked_up`.
+
+### 8.3 Holds and Stripe's clock
+Our hold is 10 minutes; Stripe's shortest session expiry is 30 minutes (§17). The sequence every minute:
+1. `release_expired_holds()` moves expired holds to `expired` and frees their items (one SQL call).
+2. For each returned order, `stripe.checkout.sessions.expire(sessionId)`. A session that is already complete throws; the
+   error is logged and ignored, because its `checkout.session.completed` event is on its way.
+
+The gap between 1 and 2 is the race: a customer who pays in it has an `expired` order and a successful payment. The
+webhook handles it with `reserve_for_paid`; if the slot has filled up meanwhile, the payment is refunded and the order
+`cancelled`. The customer's status page shows "Payment refunded: the slot filled up while you were paying". Rare,
+explicit, tested with a fake Stripe.
+
+## 9. Stripe (test mode only)
+
+### 9.1 Checkout Session
+`mode: payment`, `currency: eur`, one `line_item` per priced line with `quantity: 1` and `unit_amount` = the line's
+discounted gross (so cents always match ours, also for combos and discounts), the line's name as
+"2 × Chicken Burger (large, garlic)", `client_reference_id` and `metadata.order_id` = the order id,
+`expires_at` = creation + 30 minutes (the minimum), `success_url` = `${WEB_ORIGIN}/orders/${id}?paid=1`,
+`cancel_url` = `${WEB_ORIGIN}/orders/${id}`. The customer's name is not sent to Stripe.
+
+### 9.2 Webhook `POST /webhooks/stripe`
+1. Read the raw body; verify with `stripe.webhooks.constructEventAsync(body, signature, STRIPE_WEBHOOK_SECRET,
+   undefined, Stripe.createSubtleCryptoProvider())` (Workers have no Node `crypto`). Bad signature → 400.
+2. `INSERT INTO stripe_events (id, type, order_id)`. Conflict → `200 { duplicate: true }`, nothing else.
+3. Handle `checkout.session.completed` and `checkout.session.expired` (§8.2); any other type → 200, recorded.
+4. A failure after step 2 deletes the event row and answers 500, so Stripe's retry is processed, not treated as a
+   duplicate. The transitions themselves are conditional updates, so even a retry that slips through cannot double-pay.
+
+Secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` as Worker secrets (`wrangler secret put`), locally in the
+git-ignored `.dev.vars`. Local webhooks: `stripe listen --forward-to localhost:8787/webhooks/stripe`.
+
+### 9.3 Refunds
+Only the one case in §8.2: `stripe.refunds.create({ payment_intent })` for a paid order whose slot could not be reserved
+again. No refund UI.
+
+## 10. API (`apps/api`)
+
+JSON everywhere; every request and response shape is a Zod schema in `core/src/schemas/`. Errors are
+`{ error: { code, message } }` (§12). CORS allows `WEB_ORIGIN` (and `http://localhost:3000` in dev). `now` comes from a
+`clock` on the app's environment so tests can set it.
+
+| Method, path | Request | Response |
+|---|---|---|
+| `GET /health` | — | `{ ok: true }` |
+| `GET /menu` | — | `Menu`: active items with their groups and options, combos with components, the VAT rates |
+| `GET /slots?date=YYYY-MM-DD` | — | `{ date, status, slots: SlotAvailability[] }` (§6.2). Before listing, the API calls `release_expired_holds()` so availability is fresh between cron runs. |
+| `POST /quotes` | `Cart` | `Receipt` (pure, nothing stored) |
+| `POST /orders` | `Cart & { slotStart: ISO, customerName }` | `{ order: OrderSummary, checkoutUrl }` |
+| `GET /orders/:id` | — | `OrderSummary`: status, slot, receipt, `pickupCode` only in `paid`/`ready`/`picked_up`, `checkoutUrl` only while `held`, `cancelReason` when cancelled |
+| `POST /webhooks/stripe` | Stripe | `{ received: true }` or `{ duplicate: true }` |
+| `GET /staff/orders?date=` | token | `{ date, slots: { start, label, booked, capacity, orders: StaffOrder[] }[] }` for `paid`, `ready`, `picked_up` (held orders appear only in `booked`) |
+| `POST /staff/orders/:id/ready` | token | `StaffOrder` |
+| `POST /staff/pickup` | token, `{ code }` | `StaffOrder` (`paid` or `ready` → `picked_up`) |
+
+The Worker also exports `scheduled()` for the Cron Trigger (`* * * * *`): §8.3.
+
+Environment (`wrangler.toml` vars, secrets by `wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (secret),
+`STRIPE_SECRET_KEY` (secret), `STRIPE_WEBHOOK_SECRET` (secret), `STAFF_TOKEN` (secret), `WEB_ORIGIN`.
+
+## 11. Web (`apps/web`)
+
+Next.js App Router, Tailwind, mobile-first, English. Client components where state lives; no server actions (the API is
+the only backend, as in the restaurant's own setup where the app and the portal share one API).
+
+| Route | Screen |
+|---|---|
+| `/` | **Menu.** Items by section (Chicken, Sides, Drinks, Menus); tapping an item with options opens a sheet with its groups (radio for `max 1`, checkboxes otherwise, the min/max enforced before Add). Cart bar with the total, priced locally with `core`. The cart lives in `localStorage`. |
+| `/checkout` | **Slot and pay.** Name; a day strip (today + 6, closed days greyed with "Closed"); the day's slots from `GET /slots` as chips (non-bookable ones disabled with their reason on tap); promo code field (applied via `POST /quotes`); the receipt with VAT lines; **Pay** → `POST /orders` → redirect to `checkoutUrl`. Slot errors from the API are shown inline and the slot list refreshes. |
+| `/orders/[id]` | **Status.** Polls `GET /orders/:id` every 3 s while `held`. `paid`: the QR code (SVG of the staff pickup URL), the pickup code in letters, slot time, the receipt. `ready`: a "Ready, come and get it" banner. `picked_up`: "Enjoy your meal". `expired`: "Your slot hold ran out; start again". `cancelled`: the reason in words. |
+| `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`). Today's slots as sections with `booked/capacity`; each order a card: code, name, items with options, status, buttons **Ready** and **Picked up**. Refreshes every 10 s. A date picker for other days. |
+| `/staff/pickup?code=` | **Check-in.** The QR code's target. With the token: calls `POST /staff/pickup` and shows the order and "Picked up ✓", or the error. Without: asks for the token first. |
+
+No design system beyond Tailwind defaults and one accent colour. No dark mode work.
+
+## 12. Errors
+
+| Code | HTTP | Where |
+|---|---|---|
+| `validation` | 400 | any body or query that fails its Zod schema (with the issues) |
+| `unknown_item`, `item_inactive`, `unknown_option`, `option_count`, `options_on_combo`, `quantity_out_of_range`, `too_many_lines`, `empty_cart`, `invalid_price` | 400 | `POST /quotes`, `POST /orders` |
+| `promo_invalid` | 400 | same |
+| `closed_day`, `too_far`, `slot_not_on_grid`, `slot_past_cutoff`, `slot_too_soon`, `too_many_items` | 409 | `POST /orders` |
+| `slot_full` | 409 | `POST /orders` (from `place_hold`) |
+| `payment_unavailable` | 502 | Stripe failed while creating the session; the hold is released |
+| `order_not_found` | 404 | `GET /orders/:id`, staff routes |
+| `invalid_transition` | 409 | staff routes (e.g. Ready on a `held` order) |
+| `invalid_code` | 404 | `POST /staff/pickup` |
+| `unauthorized` | 401 | `/staff/*` without or with a wrong token |
+| `bad_signature` | 400 | webhook |
+| `internal` | 500 | anything else; the message never leaks internals |
+
+## 13. Testing
+
+| Layer | What | How |
+|---|---|---|
+| Unit, `core` | **Slots:** the grid for each weekday of the seed, a day with two ranges, "24:00", the 44/92/100 DST counts and labels, the non-existent and ambiguous opening times, earliest start (exact grid point, mid-slot, across the DST gap), cut-off with a config where it matters (prep 0, cut-off 10), horizon edges in Berlin time with the process in UTC, `dayStatus` for every value, `listSlots` reasons, `checkSlot` error order, `holdExpiry`. **Pricing:** every `CartError`, deltas (0, positive, negative), min/max groups, the worked example of §7.4, VAT rounding on a table of hand-computed cases (e.g. 1 cent, 100, 1000, 1999 at 7 and 19), percent and fixed promos, the largest-remainder spread (a 10 % discount over 1500/500, 5 % over 333/333/334), a fixed promo larger than the subtotal, the VAT summary summing to the total for random carts (a property test with a seeded generator), combo parts (one per rate, sums equal the discounted line gross), `priceCart` deterministic. **Orders:** `canTransition` over the whole table, pickup codes (8 Crockford chars, no ambiguous letters, 10 000 draws unique). **Schemas:** every API shape round-trips its example. | Vitest in `packages/core`; `now` fixed per test; no network |
+| API | Every route with `app.request()` against the in-memory repository and a fake `Payments`: happy paths, each error code, `GET /slots` releasing expired holds first, `POST /orders` pricing server-side (a tampered total is ignored), `pickupCode` hidden while held, staff token (missing, wrong, right), ready/pickup transitions, the webhook: a real signature built with `stripe.webhooks.generateTestHeaderString` and a test secret, a bad signature, `completed` → paid, the same event twice → one paid order and one event row, `expired` → cancelled only when held, an unknown order → 200, a processing failure removing the event row, the `expired`-then-paid race (re-reserve ok; slot full → refund + cancelled), and the cron handler (release, then expire sessions, a completed session's error ignored). | Vitest in `apps/api`, `app.request()`, fakes; no network |
+| Database | `pnpm test:db` against local Supabase: migrations and seed apply from scratch (`supabase db reset` in `globalSetup`); `reserve_slot` with capacity 1: **50 parallel RPC calls → exactly 1 success, 49 `slot_full`**, `booked = 1`; `place_hold` rolls the reservation back when the insert fails; `release_hold` once and again (no double release); `release_expired_holds` with a fixed `now` (the function takes an optional `p_now` for tests); `reserve_for_paid` ok and full; the invariant of §8.2 after each; RLS: the anon key sees no rows of any table and cannot call the functions. | Vitest in `apps/api` (`test/db/*.test.ts`, own config), `supabase-js` for the parallel calls through PostgREST as production does, `postgres` for assertions; CI runs it with the Supabase CLI |
+| Manual | The phone flow with the test card `4242 4242 4242 4242`, the QR scan from a second phone, the staff board | Before each milestone's review, and against production after each deploy |
+
+Test-first: a milestone's tests are written and reviewed before the implementation (`docs/plan.md`).
+
+## 14. CI/CD and deployment
+
+### Checks (every push and pull request)
+`pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm check` (Biome), `pnpm test`, then `pnpm test:db` with the
+Supabase CLI (`supabase/setup-cli`, then `supabase db start`; if that proves slow or flaky in M0, a `postgres:17` service
+container with the migrations applied by `psql` instead, and this line changes).
+
+### Deploys (push to `main`, after the checks)
+1. `supabase db push` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`. A migration is always
+   run locally first (`supabase db reset`) and reviewed before it is pushed.
+2. `wrangler deploy` in `apps/api` with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (secrets live in Cloudflare, set
+   once by hand with `wrangler secret put`).
+3. `opennextjs-cloudflare build && opennextjs-cloudflare deploy` in `apps/web` (from M6).
+
+Markdown-only changes skip CI (`paths-ignore`).
+
+### Where it runs
+- **API:** Worker `slot-order-api`, `*.workers.dev`, Cron Trigger every minute, `nodejs_compat` only if the Stripe SDK
+  needs it (verified in M5; the spec records the answer). M0 note: with `compatibility_date = 2026-11-06`, wrangler
+  4.158 reports Node.js compatibility as already enabled without the flag; `@types/node` is added to `apps/api` when a
+  `node:` import first appears.
+- **Web:** Worker `slot-order-web` via OpenNext, `*.workers.dev`.
+- **Database:** a Supabase free-tier project in `eu-central-1` (Frankfurt). The service-role key exists only as a Worker
+  secret and in the Mac's `.dev.vars`.
+- **Stripe:** a test-mode webhook endpoint pointing at the Worker; the signing secret stored with `wrangler secret put`.
+
+## 15. Development setup
+
+Prerequisites: Node 24+, pnpm 11 (pinned in `packageManager`), Docker (for `supabase start`), the Supabase CLI
+(`brew install supabase/tap/supabase`), the Stripe CLI (`brew install stripe/stripe-cli/stripe`, for `stripe listen`).
+`wrangler` is a devDependency.
+
+```sh
+pnpm install
+supabase start                      # local Postgres + PostgREST (Docker); prints the local keys
+cp apps/api/.dev.vars.example apps/api/.dev.vars    # local secrets: Supabase local keys, Stripe test keys, STAFF_TOKEN
+cp apps/web/.env.example apps/web/.env.local        # NEXT_PUBLIC_API_URL
+supabase db reset                   # migrations + seed
+pnpm dev                            # wrangler dev on :8787 and next dev on :3000
+stripe listen --forward-to localhost:8787/webhooks/stripe   # in another terminal; put its secret in .dev.vars
+pnpm test · pnpm test:db · pnpm typecheck · pnpm check · pnpm format
+```
+
+`HANDOFF.md` (the private brief) and `MESSAGE.md` (the note that goes with the repo link) sit in the repo root and are
+git-ignored; nothing in the committed repo names the company this was written for.
+
+## 16. Later
+
+- **POS adapter (M7):** `PosAdapter { pushPaidOrder(order): Promise<void> }` called after `paid`, with a mock that logs
+  to a `pos_log` table shown on the staff board. Only after M6 is reviewed and time is left.
+- Customer accounts and order history; real staff accounts (Supabase Auth with RLS policies).
+- Eat-in orders (would need per-order VAT treatment only if the law changes again), delivery.
+- Menu and opening-hours administration; per-slot capacity overrides; holidays.
+- Refund UI; order edits; a customer "cancel while held" button.
+- Rate limiting on `POST /orders`; observability beyond Workers logs.
+- German UI; receipts by email.
+
+## 17. Research notes
+
+- **German VAT for restaurants, 2026.** The reduced rate of 7 % applies permanently to food served in restaurants since
+  2026-01-01 (Steueränderungsgesetz 2025, passed by the Bundesrat on 2025-12-19); takeaway food was already 7 %; drinks
+  stay at 19 % (with narrow exceptions such as milk, which this menu does not have). The original brief's rule "eaten in
+  19 %" described 2024–2025. Sources: [IHK Schwerin](https://www.ihk.de/schwerin/standort-westmecklenburg/tourismus-und-gastgewerbe/rechtsfragen/steuersaetze-in-gastronomie-und-hotellerie-4835520),
+  [Grant Thornton](https://www.grantthornton.de/themen/2025/gastronomie-ab-2026-7-prozent-fuer-speisen-19-prozent-fuer-getraenke/),
+  [IHK Darmstadt](https://www.ihk.de/darmstadt/produktmarken/beraten-und-informieren/branchen/tourismus-in-suedhessen/informationen-fuer-gastronomie-und-hotellerie/reduzierter-mehrwertsteuersatz-6933470),
+  [für-gründer.de](https://www.fuer-gruender.de/blog/gastro-mehrwertsteuer-2026-das-gilt-ab-1-januar/).
+- **Stripe Checkout expiry.** `expires_at` must be between 30 minutes and 24 hours after creation; a session can be
+  ended early with the expire endpoint, which fires `checkout.session.expired`. Source:
+  [Stripe, Manage limited inventory](https://docs.stripe.com/payments/checkout/managing-limited-inventory).
+- **Next.js on Cloudflare.** `@opennextjs/cloudflare` 1.20.x supports Next.js 16 (peer `16.3.x`) and 15.5; build with
+  `opennextjs-cloudflare build`, deploy with `wrangler`; needs `nodejs_compat`. Sources:
+  [release 1.20.3](https://github.com/opennextjs/opennextjs-cloudflare/releases/tag/@opennextjs%2Fcloudflare@1.20.3),
+  [Vercel's comparison](https://vercel.com/kb/guide/next-js-on-vercel-vs-cloudflare.md).
+- **Supabase CLI in CI.** The CLI reference lists `supabase db start` beside `supabase start` as a way to start the local
+  stack, and `supabase start -x <containers>` excludes services. Which one CI uses is settled in M0. Source:
+  [Supabase CLI reference](https://supabase.com/docs/reference/cli/supabase-start).
+- **To verify in M5** (not researched yet): whether the current `stripe` package picks the fetch client on Workers by
+  default or needs `Stripe.createFetchHttpClient()`; whether `nodejs_compat` is needed at all.
