@@ -155,8 +155,8 @@ board. Spec in §16 before any code.
   where the work is independent (e.g. `slots/` and `pricing/`), runs `pnpm test`, `typecheck` and `check` when they
   report back, reads every diff, and writes the spec back. Subagents never commit, push, or touch secrets or CI.
 - **Context.** When the orchestrator's context passes ~28 %, it writes `docs/handoffs/next-session.md` (state, what is
-  green, what is open, the next step) and the next session starts fresh from it. Milestone status is kept in this file
-  ("Status" below).
+  green, what is open, the next step) and the next session starts fresh from it. The Status table below is updated at
+  every step change and after every approval, with a "Next action" line, so any context can resume from it.
 - **Review gate.** A milestone ends when tests, typecheck and lint pass and the demo works. The orchestrator commits on a
   branch `m<N>-<name>`, pushes it so CI runs, opens a PR, and **stops**. Anton reviews and runs it; what he changes or
   asks to change is an entry for the README's "What the agent got wrong" (with the commit). He merges; `main` deploys.
@@ -167,11 +167,20 @@ board. Spec in §16 before any code.
 
 ## Status
 
-| Milestone | State | PR | Notes |
+Updated at **every step change** and after each of Anton's approvals, so a fresh context can pick up here
+(Anton's rule, 2026-11-06). Steps of a milestone: `not started` → `contract written` (§-sections, schemas, stubs,
+briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
+`docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
+
+**Next action:** M1 is at `demo ok, PR open` (#2); waiting for Anton's review. After his approval and merge: set M1 to
+`merged`, then start M2 (pricing): write the §7 contract (schemas, stubs in `src/pricing/`, `src/orders/`), the
+test brief `docs/handoffs/m2-pricing-tests.md`, and run the test agent (Opus 5.5, xhigh).
+
+| Milestone | Step | PR | Notes |
 |---|---|---|---|
-| Spec, plan, CLAUDE.md | written 2026-11-06, **awaiting review** | — | |
-| M0 | built 2026-11-06, **PR open, awaiting review** | #1 | checks and demo green locally; CI: checks 28 s, Supabase stack 1 min 35 s on the runner (timing job, required from M3) |
-| M1 | not started | | |
+| Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
+| M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
+| M1 | **demo ok, PR open** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | not started | | |
 | M3 | not started | | |
 | M4 | not started | | |
@@ -180,6 +189,9 @@ board. Spec in §16 before any code.
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-06, M1 (after the implementer's report): §6.3 wall-clock → instant conversion is core's own `wallToInstant` with a host-independent rule (ambiguous → first occurrence, gap → forward), because `TZDate`'s constructor answers differently on a UTC and a Berlin host; the core suite runs under both `TZ`s in CI. §6.2 `slot_past_cutoff` also when `start ≤ now` (cut-off 0). §6.3 the duplicate-slot guard for a boundary in the spring gap. In the M1 green commit.
+- 2026-11-06, M1 (after the test agent's report): §6.3 the DST days are Sundays, so the 44-slot claim needs Sunday opened; §6.2 ranges may touch, `"24:01"`–`"24:59"` refused, `too_many_items` is the configured capacity. The brief's cut-off example was wrong (12:15 is bookable at 12:00); the tests follow §6.1.
+- 2026-11-06, M1: §6.2 rewritten as the API contract (signatures, `SlotUsage`/`Booked`, reason and error orders); §6.3: an ambiguous wall time resolves to its second occurrence (the draft said first); §4: date-fns versions. In the M1 tests commit.
 - 2026-11-06, M0: §14 fixes the CI shape for `test:db` (`supabase start -x …`, 1 min 35 s measured) and notes that `compatibility_date = 2026-11-06` enables Node.js compatibility without `nodejs_compat`; written in the M0 commit.
 
 ## Verification (every milestone)

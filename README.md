@@ -32,11 +32,14 @@ _Supabase, Stripe and the web app are wired in during M3–M6._
 
 ```sh
 pnpm test        # core and API unit tests; no network, no database
+pnpm --filter @slot-order/core test:berlin   # the core suite again with the process in Berlin time (§6.3)
 pnpm typecheck   # TypeScript, with the Workers runtime types from `wrangler types`
 pnpm check       # Biome lint and format (`pnpm format` fixes)
 ```
 
-_The slot, pricing and database suites arrive in M1–M3; `pnpm test:db` (local Supabase) in M3._
+The slot rules (`packages/core/test/slots/`, 145 tests) cover the grid on both 2026 DST days, prep time, cut-off,
+holds, the booking horizon in Berlin days, every reason and error in its order of precedence, and the config schema.
+The pricing and database suites arrive in M2–M3; `pnpm test:db` (local Supabase) in M3.
 
 ## What the agent got wrong and what I changed
 

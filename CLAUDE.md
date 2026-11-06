@@ -27,6 +27,9 @@ write.
 5. **"What the agent got wrong and what I changed"** in `README.md`: whenever Anton corrects something the agent did,
    add an entry with the commit. Real examples only.
 6. **Context below ~28 %.** Write `docs/handoffs/next-session.md` and start a fresh session rather than let one grow.
+7. **Plan status at every step.** After every step change (contract, tests red, implementation green, PR open,
+   approved, merged) update the Status table and its "Next action" line in `docs/plan.md`, so a fresh context picks up
+   from the current stage without asking. Anton's rule, 2026-11-06.
 
 ## Layout
 

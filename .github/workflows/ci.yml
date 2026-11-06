@@ -34,6 +34,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm check
       - run: pnpm test
+      # The slot rules must not depend on the host's timezone (docs/design.md §6.3): the core suite once more
+      # with the process in Berlin time.
+      - run: pnpm --filter @slot-order/core test:berlin
 
   # M0 learns how long the local Supabase stack takes on a runner, for the database tests that
   # arrive in M3 (docs/design.md §14): only Postgres, PostgREST and the gateway, no studio, mail,

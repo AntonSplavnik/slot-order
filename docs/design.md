@@ -120,7 +120,7 @@ phone / laptop ── Next.js on Cloudflare (apps/web) ── fetch ──▶ Ho
 | Database | Supabase (Postgres 17), `supabase-js` 2, Supabase CLI for local dev and migrations |
 | Payments | `stripe` (stripe-node) with the fetch HTTP client and the SubtleCrypto provider for webhook signatures (§9.2) |
 | Web | Next.js 16 (App Router), Tailwind 4, `qrcode` for the QR code as SVG, `@opennextjs/cloudflare` for deployment |
-| Time | `date-fns` 4, `@date-fns/tz` |
+| Time | `date-fns` 4.4.0, `@date-fns/tz` 1.5.0 (`TZDate`; instant arithmetic with `addMinutes`, labels with `format`) |
 | Tests | Vitest; Hono's `app.request()` for routes; `supabase-js` and `postgres` (porsager) against local Supabase for `test:db` |
 | Lint/format | Biome 2 (same config as the author's other projects: spaces, line width 100) |
 | CI/CD | GitHub Actions |
@@ -249,26 +249,61 @@ Promo codes: `HAHN10` (10 %), `WELCOME3` (3.00 off), `OLD` (inactive).
 - A slot is **bookable** for `n` items when it is on the grid, `start >= earliest`, `now <= start − cutoff`,
   and `available >= n`.
 
-### 6.2 Functions (pure; `now` and the config are arguments)
-- `slotGrid(config, day): Slot[]` — the day's slots: `{ start: Date, label: "12:30" }`.
-- `dayStatus(config, day, now): 'open' | 'closed' | 'past' | 'too_far'`.
-- `listSlots(config, day, now, booked: Map<startMs, number>): SlotAvailability[]` — every slot of the day with
-  `available`, `bookable` and, when not bookable, a `reason` of `past`, `too_soon`, `cutoff` or `full`.
-- `checkSlot(config, start, items, now, booked): ok | SlotError` — the rule used by `POST /orders`, in this order:
-  `closed_day`, `too_far`, `slot_not_on_grid`, `slot_past_cutoff`, `slot_too_soon`, `too_many_items` (more items than a
-  slot's capacity can ever hold), `slot_full`.
-- `holdExpiry(config, now): Date`.
+### 6.2 API (`packages/core/src/slots/index.ts`; types and schemas in `src/schemas/slots.ts`)
+All functions are pure; `now` and the config are arguments. Instants are `Date`s; a slot is identified by its instant.
+
+- `SlotConfig` (Zod): `{ timezone, slotMinutes, capacityPerSlot, prepMinutes, cutoffMinutes, holdMinutes, maxDaysAhead,
+  openingHours }`. `openingHours` maps `mon` … `sun` to `[open, close][]` of `"HH:MM"` strings; `close > open`;
+  `"24:00"` is allowed only as a close (`"24:01"` … `"24:59"` are refused); a day's ranges are sorted and do not
+  overlap, but may touch (`[open, close)` is half-open, so `11:00–14:00` and `14:00–18:00` are fine); a day with `[]`
+  is closed. The schema refuses anything else.
+- `DayString` = `"YYYY-MM-DD"` (a calendar day in the config's timezone). `Slot = { start: Date; label: string }`,
+  the label `"HH:MM"` in the config's timezone. `SlotUsage = { booked: number; capacity: number }`;
+  `Booked = ReadonlyMap<number, SlotUsage>` keyed by `start.getTime()`, one entry per slot that has a row (§3 Slot rows);
+  a missing entry means `{ booked: 0, capacity: config.capacityPerSlot }`.
+  `SlotReason = "past" | "cutoff" | "too_soon" | "full"`. `SlotAvailability = Slot & { available: number; bookable: boolean; reason?: SlotReason }`.
+  `DayStatus = "open" | "closed" | "past" | "too_far"`. `SlotErrorCode = "closed_day" | "too_far" | "slot_not_on_grid" | "slot_past_cutoff" | "slot_too_soon" | "too_many_items" | "slot_full"`.
+  `SlotCheck = { ok: true; slot: Slot } | { ok: false; code: SlotErrorCode }`.
+- `todayIn(config, now): DayString` — the calendar day of `now` in the timezone.
+- `dayOf(config, instant): DayString` — the same for any instant.
+- `slotGrid(config, day): Slot[]` — the day's slots in order (§6.1); `[]` for a closed day.
+- `dayStatus(config, day, now): DayStatus` — in this order: `closed` (no ranges that weekday), `past` (before
+  `todayIn`), `too_far` (`day ≥ today + maxDaysAhead`), else `open`.
+- `earliestStart(config, day, now): Date | null` — the first slot of the day's grid with `start ≥ now + prepMinutes`;
+  `null` when the day has none left.
+- `listSlots(config, day, now, booked, items = 1): SlotAvailability[]` — every grid slot with
+  `available = capacity − booked`, `bookable`, and for a slot that is not bookable the first reason that applies, in
+  this order: `past` (`start ≤ now`), `cutoff` (`now > start − cutoffMinutes`), `too_soon` (`start < earliestStart`),
+  `full` (`available < items`).
+- `checkSlot(config, start, items, now, booked): SlotCheck` — the rule behind `POST /orders`, the first error that
+  applies in this order: `closed_day` (the day of `start` has no ranges), `too_far`, `slot_not_on_grid` (`start` is not
+  an instant of that day's grid), `slot_past_cutoff` (`start ≤ now` or `now > start − cutoffMinutes`; the first part matters only with
+  `cutoffMinutes: 0`, and covers any past slot and any past day), `slot_too_soon`, `too_many_items` (`items > capacityPerSlot`: an order never exceeds the configured slot capacity, whatever an older
+  slot row's capacity says), `slot_full` (`available < items`).
+- `holdExpiry(config, now): Date` — `now + holdMinutes`.
+
+Wall-clock times are turned into instants by `wallToInstant` in `src/slots/time.ts` (§6.3), `"24:00"` as the next
+day's midnight; `TZDate` is used only to read an instant's wall clock (labels, days, weekdays).
 
 ### 6.3 DST
 Because the grid is walked in instants, 2026-03-29 (clocks forward) and 2026-10-25 (clocks back) need no special code;
 they need tests:
-- With the seed hours (11:00–22:00) both days have 44 slots, 15 minutes apart, labelled 11:00 … 21:45.
+- Both DST days of 2026 are Sundays, which the seed closes; with the seed hours and Sunday opened 11:00–22:00 (a test
+  config) both days have 44 slots, 15 minutes apart, labelled 11:00 … 21:45, and the Saturday and Monday around each
+  change have their usual 44 too.
 - With a 00:00–24:00 test config, 2026-03-29 has 92 slots and 2026-10-25 has 100; no label is missing and no instant
   repeats (the two "02:xx" hours in October are different instants with the same labels, which is right: the kitchen
   works both of them).
-- An opening time that does not exist on the day (02:30 on 2026-03-29) is resolved by `TZDate` by moving forward; an
-  ambiguous one (02:30 on 2026-10-25) resolves to its first occurrence. Both are pinned by a test, so a library upgrade
-  that changes them is noticed. (If M1 finds `TZDate` behaves differently, the spec changes to what it does.)
+- Wall-clock times are converted to instants by core's own `wallToInstant` (built on `tzOffset` from `@date-fns/tz`),
+  not by `TZDate`'s constructor, because that constructor resolves an ambiguous time differently depending on the
+  **host machine's** timezone (measured with 1.5.0: second occurrence on a UTC host, first on a Berlin host). The rule,
+  the same as Temporal's `compatible` disambiguation and host-independent: a time that does not exist (02:30 on
+  2026-03-29) moves forward by the length of the gap (03:30 CEST); an ambiguous time (02:30 on 2026-10-25) is its
+  **first** occurrence (02:30 CEST, +02:00). Both are pinned by tests, and the core suite runs in CI under `TZ=UTC` and
+  `TZ=Europe/Berlin` with the same results.
+- A range boundary inside the spring gap can make two ranges overlap once converted (a close of 02:30 becomes 03:30,
+  after the next range's 03:00 open): a slot whose start falls inside the previous slot is skipped, so no instant
+  repeats.
 - Earliest start across the boundary: at 2026-03-29 00:50 Berlin with prep 20 and a 24-hour config, the earliest slot is
   01:15; at 01:50 it is 03:15 (02:xx does not exist).
 - `dayStatus` and the horizon use Berlin days, with a test at 23:30 and 00:30 Berlin time while the process runs in UTC.
