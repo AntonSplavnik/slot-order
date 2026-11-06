@@ -21,7 +21,8 @@ Prerequisites: Node 24+, pnpm 11 (pinned in `packageManager`), Docker, the Supab
 
 ```sh
 pnpm install
-supabase start                 # local Postgres + PostgREST in Docker (from M3)
+supabase start                 # local Postgres + PostgREST in Docker
+supabase db reset              # migrations + the Goldhahn seed, from scratch
 pnpm dev                       # the API on http://localhost:8787 (and the web app on :3000 from M6)
 curl localhost:8787/health     # {"ok":true}
 ```
@@ -41,7 +42,14 @@ The slot rules (`packages/core/test/slots/`, 145 tests) cover the grid on both 2
 holds, the booking horizon in Berlin days, every reason and error in its order of precedence, and the config schema.
 The pricing rules (`packages/core/test/pricing/`, 150 tests) cover validation and its order, integer VAT rounding,
 discounts spread by largest remainder, combo splits, the VAT summary, two worked receipts and a seeded property test;
-the order transitions and pickup codes (`test/orders/`, 77 tests). The database suite arrives in M3 (`pnpm test:db`).
+the order transitions and pickup codes (`test/orders/`, 77 tests). ```sh
+pnpm test:db     # against local Supabase: migrations, seed, the SQL functions, RLS, and the 50-parallel reservation
+```
+
+The database suite (`apps/api/test/db/`, 78 tests) resets the local stack from the migrations and seed, maps the seed
+back onto the core fixtures so they cannot drift, races 50 connections for the last place in a slot (exactly one wins,
+also through PostgREST as production calls it), exercises every hold function with the booked-items invariant checked
+after each, and proves the anon key reads nothing and can call nothing.
 
 ## What the agent got wrong and what I changed
 

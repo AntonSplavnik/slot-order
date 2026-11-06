@@ -191,6 +191,7 @@ seed (green)" together with the CI job, then the cloud project (needs Anton's go
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-06, M3 (after the implementer's report): §5 `reserve_for_paid` updates the order before reserving the slot (same lock order as `release_hold`); `release_slot` raises `invalid_items`; `release_expired_holds` uses `FOR UPDATE SKIP LOCKED` and `<`; extra CHECKs listed; `stripe_events.order_id` has no foreign key; explicit `GRANT … TO service_role`. Harness: PostgREST warmed up after `db reset` (stale connections made a race test flaky back to back).
 - 2026-11-06, M3 (after the test agent's report): `promo_codes.sort`; §5 notes that PostgREST returns a `NULL` row as an all-null object (M4 checks `id === null`).
 - 2026-11-06, M3 (contract): §5 function signatures take `p_now` / `p_hold_expires_at` / `p_payment_intent_id`; `release_slot` returns the row; `slot_booked_mismatches()` added; `combo_components.sort`; migrations named `<timestamp>_<name>.sql`; the row mapping `apps/api/src/db/rows.ts`; `VAT_RATES_DE_2026` in core; §13 Database row rewritten.
 - 2026-11-06, M2 (after the test agent's report): §7.3 round robin for all-zero weights; §7.4 parts food before drink, a combo's `vatCategory` ignored, a combo line split as one line, worked example 2's decimals corrected; §7.2 line order made explicit, a blank promo code means none. The brief's wings-menu allocation was wrong (600/323/267 is right).

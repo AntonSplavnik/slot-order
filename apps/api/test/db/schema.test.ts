@@ -1,4 +1,4 @@
-import { type Menu, ORDER_STATUSES, VAT_RATES_DE_2026 } from "@slot-order/core";
+import { ORDER_STATUSES, VAT_RATES_DE_2026 } from "@slot-order/core";
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import { seedMenu } from "../../../../packages/core/test/fixtures/menu";
 import { seedConfig } from "../../../../packages/core/test/fixtures/slotConfigs";
@@ -65,28 +65,19 @@ describe("the seed maps onto the core fixtures (§5 Seed, Row mapping)", () => {
     return data;
   }
 
-  // SPEC: `promo_codes` has no `sort` column (§5), so the order of the codes is not defined by the tables;
-  // `seedMenu` lists HAHN10, WELCOME3, OLD. The menu is compared with the codes sorted on both sides.
-  function codesSorted(menu: Menu): Menu {
-    return {
-      ...menu,
-      promoCodes: menu.promoCodes.toSorted((a, b) => a.code.localeCompare(b.code)),
-    };
-  }
-
   test("menuFromRows of the menu tables equals seedMenu", async () => {
     const [items, groups, options, components, promoCodes] = await Promise.all([
       rowsOf("menu_items", "sort"),
       rowsOf("option_groups", "sort"),
       rowsOf("options", "sort"),
       rowsOf("combo_components", "sort"),
-      rowsOf("promo_codes", "code"),
+      rowsOf("promo_codes", "sort"),
     ]);
     const menu = menuFromRows(
       { items, groups, options, components, promoCodes },
       VAT_RATES_DE_2026,
     );
-    expect(codesSorted(menu)).toEqual(codesSorted(seedMenu));
+    expect(menu).toEqual(seedMenu);
   });
 
   test("slotConfigFromRow of the settings row equals seedConfig", async () => {

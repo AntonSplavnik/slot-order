@@ -1,6 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   type Cart,
   type OrderStatus,
@@ -12,37 +9,23 @@ import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 import { expect } from "vitest";
 import { line, seedMenu } from "../../../../packages/core/test/fixtures/menu";
+import { localStack } from "./stack";
 
 // Shared pieces of the database suite (docs/design.md §13 Database, docs/handoffs/m3-db-tests.md): the
 // connections to the local Supabase stack, the fixtures, and the invariant check. Each test file closes the
 // pool with `afterAll(closeDb)`.
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-
-type StackStatus = { DB_URL: string; API_URL: string; ANON_KEY: string; SERVICE_ROLE_KEY: string };
-
-/** The local stack's URLs and keys, as `supabase status` prints them (read once per file). */
-function stackStatus(): StackStatus {
-  const json = execFileSync("supabase", ["status", "-o", "json"], {
-    cwd: REPO_ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  return JSON.parse(json) as StackStatus;
-}
-
-const stack = stackStatus();
-const apiUrl = process.env.SUPABASE_URL ?? stack.API_URL;
+const stack = localStack();
 const auth = { persistSession: false, autoRefreshToken: false };
 
 /** Postgres as the `postgres` role, directly: assertions, and the 50 parallel callers. */
-export const sql = postgres(process.env.TEST_DATABASE_URL ?? stack.DB_URL, { max: 50 });
+export const sql = postgres(stack.dbUrl, { max: 50 });
 
 /** PostgREST with the service-role key: how the Worker calls the database (§3 Trust boundary). */
-export const service = createClient(apiUrl, stack.SERVICE_ROLE_KEY, { auth });
+export const service = createClient(stack.apiUrl, stack.serviceRoleKey, { auth });
 
 /** PostgREST with the anon key: what anyone holding the public key could do. */
-export const anon = createClient(apiUrl, stack.ANON_KEY, { auth });
+export const anon = createClient(stack.apiUrl, stack.anonKey, { auth });
 
 export async function closeDb(): Promise<void> {
   await sql.end({ timeout: 5 });

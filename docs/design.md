@@ -191,8 +191,11 @@ Only `kind = 'item'` rows have groups; combos have none (CHECK by trigger is ove
 | `created_at`, `paid_at`, `ready_at`, `picked_up_at`, `expired_at`, `cancelled_at` | timestamptz | |
 
 Indexes: `(slot_start)`, `(status, hold_expires_at)` for the cron. `settings` has `CHECK (id = 1)`: one row, ever.
+CHECKs: `status` in its six values, `cancel_reason` in its three, `customer_name` 1–60 characters, `item_count ≥ 1`,
+`pickup_code` 8 alphabet characters, `promo_code` 2–20 of A–Z 0–9, a `held` order has a `hold_expires_at`.
 
-### `stripe_events` — `id` text PK (Stripe's `evt_…`), `type` text, `order_id` uuid null, `received_at` timestamptz.
+### `stripe_events` — `id` text PK (Stripe's `evt_…`), `type` text, `order_id` uuid null (no foreign key: an event for an
+unknown order is still recorded, §9.2), `received_at` timestamptz.
 
 ### SQL functions (`supabase/migrations/20261106120100_functions.sql`)
 All `LANGUAGE plpgsql`, called by the Worker as the service role through PostgREST (`supabase.rpc`), each call its
@@ -204,7 +207,8 @@ rules depend on it, so the tests control it; the API passes `new Date()` from it
   NOTHING` (an existing row keeps its capacity, §3 Slot rows); then `UPDATE slots SET booked = booked + p_items WHERE
   starts_at = p_starts_at AND booked + p_items <= capacity RETURNING *`. No row updated → `RAISE EXCEPTION 'slot_full'`.
   The row lock of the `UPDATE` serialises concurrent callers; the `WHERE` makes the losers fail instead of overbooking.
-- `release_slot(p_starts_at timestamptz, p_items int) returns slots`: `booked = booked − p_items` (the CHECK keeps it ≥ 0).
+- `release_slot(p_starts_at timestamptz, p_items int) returns slots`: `p_items < 1` → `invalid_items`; `booked = booked −
+  p_items` (the CHECK keeps it ≥ 0).
 - `place_hold(p_order jsonb, p_capacity int, p_hold_expires_at timestamptz) returns orders`: `reserve_slot` for
   `p_order->>'slot_start'` and `item_count`, then `INSERT INTO orders` with `status = 'held'` and the given expiry.
   `p_order` keys: `slot_start` (ISO 8601 with offset), `customer_name`, `lines` (array), `receipt` (object),
@@ -216,17 +220,20 @@ rules depend on it, so the tests control it; the API passes `new Date()` from it
   return it; otherwise return `NULL` (already moved on: callers treat that as done). Through PostgREST a `NULL` row
   arrives as an object whose every field is `null`, not as `null`: the repository (M4) checks `id === null`.
 - `release_expired_holds(p_now timestamptz default now()) returns setof orders`: every `held` order with
-  `hold_expires_at < p_now`, through `release_hold(id, 'expired', null, p_now)`, returned so the Worker can expire
-  their Stripe sessions.
+  `hold_expires_at < p_now` (strictly), selected `FOR UPDATE SKIP LOCKED` (an order another transaction is moving right
+  now is left for the next minute's run), through `release_hold(id, 'expired', null, p_now)`, returned so the Worker
+  can expire their Stripe sessions.
 - `reserve_for_paid(p_order_id uuid, p_capacity int, p_payment_intent_id text, p_now timestamptz default now())
   returns orders`: the webhook's second chance (§8.4) for an `expired` order (any other status → `invalid_status`):
-  `reserve_slot` again (raises `slot_full`), then `status = 'paid'`, `paid_at = p_now`, the payment intent stored.
+  the conditional `UPDATE … WHERE status = 'expired'` to `paid` (`paid_at = p_now`, the payment intent stored) first,
+  then `reserve_slot` again, which raises `slot_full` and rolls the update back. Order first, slot second, the same
+  lock order as `release_hold`.
 - `slot_booked_mismatches() returns table (starts_at timestamptz, booked int, counted bigint)`: the slots whose `booked`
   differs from Σ `item_count` of their orders in `held`, `paid`, `ready`, `picked_up` (§8.2 invariant); empty when
   all is well. For tests and for operators.
 
 Privileges: `REVOKE EXECUTE` on every function from `public`, `anon` and `authenticated` (Supabase grants them by
-default), so only the service role can call them; RLS keeps anon out of the tables (§3 Trust boundary). The normal
+default) and an explicit `GRANT EXECUTE … TO service_role`, so only the service role can call them; RLS keeps anon out of the tables (§3 Trust boundary). The normal
 transitions `held → paid`, `paid → ready`, `paid | ready → picked_up` are conditional `UPDATE`s in the API (§8.2), not
 functions.
 
