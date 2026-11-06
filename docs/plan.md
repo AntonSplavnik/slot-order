@@ -77,11 +77,13 @@ production check, CV.
   table, percent and fixed promos, the largest-remainder spread cases, promo above the subtotal, combo parts, the
   property test (seeded random carts: VAT summary sums to the total; discount shares sum to the discount; parts sum to
   the line), `canTransition` over the whole table, pickup codes.
-- **Then implement** `src/pricing/{validate,allocate,vat,price}.ts`, `src/orders/{transitions,pickupCode}.ts`, the
-  `Menu`, `Cart`, `Receipt`, `PricedLine`, `OrderStatus`, `OrderSummary`, `StaffOrder` schemas.
+- **Then implement** `src/pricing/{validate,allocate,vat,price}.ts`, `src/orders/{transitions,pickupCode}.ts`. The
+  `Menu`, `Cart`, `Receipt`, `PricedLine`, `OrderStatus` schemas are the contract, written before the tests;
+  `OrderSummary` and `StaffOrder` are M4's, where they are used.
 - **Fixture:** `packages/core/test/fixtures/menu.ts` is the Goldhahn menu as `core` sees it; M3's `seed.sql` is written
   from it, and a `test:db` test compares the two (so the seed and the fixture cannot drift).
-- **Demo:** a test prints the §7.4 receipt (lines, VAT per rate, total).
+- **Demo:** the two worked receipts of §7.4 pinned to the cent by tests that read as sentences in `pnpm test`'s
+  verbose output (changed from "a test prints the receipt": a printing test proves nothing; the pinned one does).
 
 ### M3: Supabase schema, functions, seed
 - **Tests first** (`apps/api/test/db/`, own Vitest config, `globalSetup` runs `supabase db reset`): migrations apply;
@@ -172,16 +174,17 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M1 is at `demo ok, PR open` (#2); waiting for Anton's review. After his approval and merge: set M1 to
-`merged`, then start M2 (pricing): write the §7 contract (schemas, stubs in `src/pricing/`, `src/orders/`), the
-test brief `docs/handoffs/m2-pricing-tests.md`, and run the test agent (Opus 5.5, xhigh).
+**Next action:** M2 at `demo ok, PR open` (#3); waiting for Anton's review. After merge: set M2 to `merged`, start M3
+on `m3-supabase` (needs Anton's Supabase account only for the cloud push at the end; local work needs Docker only):
+§5 is the contract; write `supabase/migrations/0001_schema.sql`, `0002_functions.sql`, `seed.sql` test-first via
+`apps/api/test/db/` (brief `docs/handoffs/m3-db-tests.md`), the `test:db` scripts and the CI job.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
-| M1 | **demo ok, PR open** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
-| M2 | not started | | |
+| M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
+| M2 | **demo ok, PR open** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | not started | | |
 | M4 | not started | | |
 | M5 | not started | | |
@@ -189,6 +192,8 @@ test brief `docs/handoffs/m2-pricing-tests.md`, and run the test agent (Opus 5.5
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-06, M2 (after the test agent's report): §7.3 round robin for all-zero weights; §7.4 parts food before drink, a combo's `vatCategory` ignored, a combo line split as one line, worked example 2's decimals corrected; §7.2 line order made explicit, a blank promo code means none. The brief's wings-menu allocation was wrong (600/323/267 is right).
+- 2026-11-06, M2 (contract): §7 rewritten with §7.6 as the API contract (`priceCart(menu, cart)`, the VAT rates inside the `Menu`, `allocate`, `splitVat`, `itemCount`; a combo counts as one item; `duplicate_option` added; promo matching rule; the second worked example with `HAHN10`); §8.3 the orders API (`pickupCode(bytes)`, `normalizePickupCode`); §5 the seed's ids. `OrderSummary` and `StaffOrder` move from M2 to M4 in the plan.
 - 2026-11-06, M1 (after the implementer's report): §6.3 wall-clock → instant conversion is core's own `wallToInstant` with a host-independent rule (ambiguous → first occurrence, gap → forward), because `TZDate`'s constructor answers differently on a UTC and a Berlin host; the core suite runs under both `TZ`s in CI. §6.2 `slot_past_cutoff` also when `start ≤ now` (cut-off 0). §6.3 the duplicate-slot guard for a boundary in the spring gap. In the M1 green commit.
 - 2026-11-06, M1 (after the test agent's report): §6.3 the DST days are Sundays, so the 44-slot claim needs Sunday opened; §6.2 ranges may touch, `"24:01"`–`"24:59"` refused, `too_many_items` is the configured capacity. The brief's cut-off example was wrong (12:15 is bookable at 12:00); the tests follow §6.1.
 - 2026-11-06, M1: §6.2 rewritten as the API contract (signatures, `SlotUsage`/`Booked`, reason and error orders); §6.3: an ambiguous wall time resolves to its second occurrence (the draft said first); §4: date-fns versions. In the M1 tests commit.

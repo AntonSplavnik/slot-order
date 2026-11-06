@@ -39,7 +39,9 @@ pnpm check       # Biome lint and format (`pnpm format` fixes)
 
 The slot rules (`packages/core/test/slots/`, 145 tests) cover the grid on both 2026 DST days, prep time, cut-off,
 holds, the booking horizon in Berlin days, every reason and error in its order of precedence, and the config schema.
-The pricing and database suites arrive in M2–M3; `pnpm test:db` (local Supabase) in M3.
+The pricing rules (`packages/core/test/pricing/`, 150 tests) cover validation and its order, integer VAT rounding,
+discounts spread by largest remainder, combo splits, the VAT summary, two worked receipts and a seeded property test;
+the order transitions and pickup codes (`test/orders/`, 77 tests). The database suite arrives in M3 (`pnpm test:db`).
 
 ## What the agent got wrong and what I changed
 

@@ -58,7 +58,7 @@ It is not a product. Scope is deliberately small: a tested core with a short REA
 | Restaurant | Fictional: **Goldhahn**, a made-up halal chicken menu (§5 Seed). No real company's name, logo, menu, photos or texts anywhere in the repo. |
 | Money | Integer cents everywhere. Menu prices are **gross** (VAT included), as German menus show them. VAT is derived per line (§7.4). |
 | VAT | Germany, 2026: **food 7 %** (since 2026-01-01 also when eaten in, Steueränderungsgesetz 2025), **drinks 19 %**. Each menu item has a `vat_category` of `food` or `drink`; the rates sit in one table in `core` (§7.4, §17). |
-| Capacity | Counted in **items** per slot (a kitchen cooks portions, not orders). Default 20 items per 15 minutes. |
+| Capacity | Counted in **items** per slot (a kitchen cooks portions, not orders): the sum of the lines' quantities, a combo counting as one. Default 20 items per 15 minutes. |
 | Slot grid | Computed in `core` from the opening hours, in instants (UTC milliseconds), 15 minutes apart; wall-clock times only for labels and for the opening hours themselves. So DST days have fewer or more slots and never a missing or duplicated one (§6.3). |
 | Slot rows | `slots` rows are created lazily by the reservation function. A slot without a row has `capacity − 0` available. The database enforces capacity; `core` enforces everything else (grid, prep time, cut-off, horizon). |
 | No overbooking | One SQL function, `place_hold`, reserves the items and inserts the order in **one transaction** with a single conditional `UPDATE … WHERE booked + n <= capacity`. Proven by `pnpm test:db` (§13). |
@@ -232,7 +232,13 @@ Settings: Mon–Sat 11:00–22:00, Sun closed; 15-minute slots; 20 items per slo
 | **Burger Menu** (combo) | 12.90 | split | Chicken Burger + Fries + Cola (standalone 14.30) |
 | **Wings Menu** (combo) | 11.90 | split | Chicken Wings + Fries + Cola (standalone 12.90) |
 
-Promo codes: `HAHN10` (10 %), `WELCOME3` (3.00 off), `OLD` (inactive).
+Ids (slugs, shared by the seed, the `core` test fixture `packages/core/test/fixtures/menu.ts` and M3's seed check):
+items `half-chicken`, `chicken-burger`, `chicken-wings`, `fries`, `coleslaw`, `ayran`, `cola`, `water`; combos
+`burger-menu`, `wings-menu`; groups `chicken-burger-size` (`burger-regular`, `burger-large`), `chicken-burger-sauce`
+(`sauce-garlic`, `sauce-chili`, `sauce-honey-mustard`), `chicken-wings-heat` (`wings-mild`, `wings-hot`), `fries-size`
+(`fries-regular`, `fries-large`).
+
+Promo codes: `HAHN10` (10 %), `WELCOME3` (3.00 off), `OLD` (50 %, inactive).
 
 ## 6. Slot rules (`packages/core/src/slots/`)
 
@@ -315,45 +321,73 @@ every slot carrying `bookable` and a `reason`. `POST /orders` answers the `SlotE
 ## 7. Pricing rules (`packages/core/src/pricing/`)
 
 ### 7.1 Input
-A cart: `lines: { itemId, quantity (1–20), optionIds: string[] }[]` (1–30 lines), an optional `promoCode`, the
-`Menu` (items, groups, options, combos, promo codes) and the VAT rate table.
+`Cart = { lines: CartLine[] (1–30), promoCode?: string }`, `CartLine = { itemId, quantity (1–20), optionIds: string[] }`,
+priced against the `Menu` (§7.6): items and combos with their groups, options and components, the promo codes and the
+VAT rates. `itemCount` = Σ quantity (a combo counts as one item for slot capacity, §3).
 
-### 7.2 Validation (`CartError`)
-`unknown_item`, `item_inactive`, `unknown_option` (not one of the item's groups' options), `option_count` (a group's
-choices outside `[min, max]`), `options_on_combo`, `quantity_out_of_range`, `too_many_lines`, `promo_invalid` (unknown
-or inactive), `empty_cart`.
+### 7.2 Validation (`CartError`, with the line's index where one applies)
+In this order: `empty_cart`, `too_many_lines`; then per line, in line order (every check of line 1 before any check of
+line 2): `unknown_item`, `item_inactive`,
+`options_on_combo` (a combo line with any option), `unknown_option` (not in one of the item's groups),
+`duplicate_option` (the same option twice), `option_count` (a group's choices outside `[min, max]`),
+`quantity_out_of_range`, `invalid_price` (a unit gross below 0 after deltas); then `promo_invalid` (a promo code that
+is unknown or inactive; matching is trimmed and case-insensitive, and a code that is empty after trimming means no
+code).
 
 ### 7.3 Amounts
-1. **Unit gross** of a line = `price_cents` + the sum of the chosen options' `price_delta_cents` (≥ 0 after deltas; the
-   seed never goes negative, a test pins that a negative unit is an `invalid_price` error).
+1. **Unit gross** of a line = `price_cents` + the sum of the chosen options' `price_delta_cents`.
 2. **Line gross** = unit gross × quantity. **Subtotal** = the sum of line gross amounts.
-3. **Discount**: `percent` → `round(subtotal × value / 100)`; `fixed` → `min(value, subtotal)`. Never below 0, never
-   above the subtotal. The discount is **spread over the lines in proportion to their line gross**, by largest remainder
-   (floor each share, then hand the leftover cents to the largest fractional remainders, ties to the earlier line), so
-   the sum of the lines' discounts equals the discount exactly. A line's **discounted gross** = line gross − its share.
+3. **Discount**: `percent` → `round(subtotal × value / 100)` (halves up); `fixed` → `min(value, subtotal)`. Never
+   below 0, never above the subtotal. The discount is **spread over the lines in proportion to their line gross** by
+   largest remainder: floor each share, then hand the leftover cents one by one to the largest fractional remainders,
+   ties to the earlier line; if every weight is 0, the cents go round robin from the first line (`allocate(3, [0, 0])`
+   → `[2, 1]`). A line's
+   **discounted gross** = line gross − its share.
 4. **Total** = subtotal − discount = the sum of discounted gross amounts.
 
 ### 7.4 VAT
-- Rates: `{ food: 7, drink: 19 }` (§3 VAT). An option delta takes its item's category.
-- A **plain item line** has one rate: its discounted gross is taxed at its category's rate.
-- A **combo line** is split into **parts** before VAT: the discounted gross is allocated to the components in proportion
-  to their standalone value (component `price_cents` × component quantity × line quantity), by largest remainder as
-  above; parts of the same rate are summed, so a combo yields at most one part per rate.
-- **Per part**: `net = round(gross × 100 / (100 + rate))`, `vat = gross − net`. Rounding is to the nearest cent, halves
+- Rates by category, from the menu: `{ food: 7, drink: 19 }` in the seed (§3 VAT). An option delta takes its item's
+  category.
+- A **plain item line** has one part: its discounted gross at its category's rate.
+- A **combo line** is split into parts before VAT: the discounted gross is allocated to the components in proportion to
+  their standalone value (the component item's `price_cents` × the component's quantity; a component's `active` flag
+  is ignored), by the largest-remainder rule of §7.3; parts of the same category are summed, so a combo yields at most
+  one part per category, food before drink. A combo's own `vatCategory` is ignored (the seed stores `food`). A combo
+  line with quantity 2 is split as one line, not per unit.
+- **Per part**: `net = round(gross × 100 / (100 + rate))`, `vat = gross − net`, rounding to the nearest cent, halves
   up, in integer arithmetic (no floating point).
-- The receipt's **VAT summary** is the sum of the parts per rate (`{ rate, net, vat, gross }`), never recomputed from the
-  totals, so `Σ gross = total` by construction.
+- The receipt's **VAT summary** has one line per rate present, ascending, each the sum of the parts at that rate
+  (`{ rate, grossCents, netCents, vatCents }`), never recomputed from the totals, so `Σ gross = total` by construction.
+  A part or summary line whose gross is 0 is kept (a fully discounted order still shows its rates). A combo that
+  references a component missing from the menu is a fault of the menu, not of the cart: `priceCart` throws a plain
+  `Error`, which the API answers as `internal`.
 
 **Worked example** (a test): one Burger Menu at 12.90, no promo. Standalone values: burger 7.90, fries 3.50, Cola 2.90
 (sum 14.30). Allocation: burger 1290 × 790 / 1430 = 712.66, fries 315.73, drink 261.61 → floors 712 + 315 + 261 = 1288,
 two cents left → fries (.73) and burger (.66) → **713, 316, 261**. Parts: food 1029 → net 962, VAT 67; drink 261 →
 net 219, VAT 42. Receipt: subtotal 1290, discount 0, total 1290, VAT 7 % 67 on 1029, VAT 19 % 42 on 261.
 
+**With `HAHN10`**: discount 129, discounted gross 1161 → allocation 641.39 / 284.16 / 235.45 → floors 1160, one cent
+to the drink (.45) → **641, 284, 236**; food 925 → net 864, VAT 61; drink 236 → net 198, VAT 38; total 1161.
+
 ### 7.5 Output
-`Receipt { lines: PricedLine[], subtotalCents, discountCents, promoCode?, totalCents, vat: VatLine[] }` where
-`PricedLine { itemId, name, optionNames, quantity, unitGrossCents, lineGrossCents, discountCents, parts: { rate, grossCents, netCents, vatCents }[] }`.
-`priceCart(menu, rates, cart): Receipt` throws `CartError`. The same function runs in the browser (instant totals) and in
-the Worker (the amount that goes to Stripe).
+`Receipt { lines: PricedLine[], itemCount, subtotalCents, discountCents, promoCode?, totalCents, vat: VatLine[] }`,
+`PricedLine { itemId, name, kind, optionNames, quantity, unitGrossCents, lineGrossCents, discountCents, parts: VatPart[] }`,
+`VatPart { category, rate, grossCents, netCents, vatCents }`. The same function runs in the browser (instant totals)
+and in the Worker (the amount that goes to Stripe).
+
+### 7.6 API (`packages/core/src/pricing/index.ts`; schemas in `src/schemas/{menu,cart,receipt}.ts`)
+- `Menu = { items: MenuItem[], promoCodes: PromoCode[], vatRates: { food, drink } }`;
+  `MenuItem = { id, name, description?, priceCents, vatCategory, kind: "item" | "combo", sort, active, optionGroups,
+  components }` (groups only on items, components only on combos, enforced by the schema);
+  `OptionGroup = { id, name, minChoices, maxChoices, options: Option[] }` (`min ≤ max ≤ options.length`);
+  `Option = { id, name, priceDeltaCents }`; `ComboComponent = { itemId, quantity }`;
+  `PromoCode = { code (upper case, 2–20 of A–Z 0–9), kind: "percent" | "fixed", value, active }`.
+  Ids are slugs; the seed's are listed in §5.
+- `priceCart(menu, cart): Receipt` — throws `CartError { code: CartErrorCode, lineIndex? }` (§7.2).
+- `itemCount(cart): number`.
+- `allocate(total, weights: number[]): number[]` — the largest-remainder split of §7.3, exported for direct tests.
+- `splitVat(grossCents, rate): { netCents, vatCents }` — §7.4, exported for direct tests.
 
 ## 8. Order lifecycle (`packages/core/src/orders/`)
 
@@ -380,7 +414,17 @@ answer 200).
 **Invariant** (tested in `test:db`): for every slot, `booked = Σ item_count` of its orders in `held`, `paid`, `ready`,
 `picked_up`.
 
-### 8.3 Holds and Stripe's clock
+### 8.3 Orders API (`packages/core/src/orders/index.ts`; schemas in `src/schemas/orders.ts`)
+- `ORDER_STATUSES` and `OrderStatusSchema`; `CANCEL_REASONS` = `stripe_failed`, `session_expired`, `refunded_slot_full`.
+- `canTransition(from, to): boolean` and `nextStatuses(from): OrderStatus[]`, the table of §8.2 and nothing else.
+- `pickupCode(bytes: Uint8Array): string` — 8 characters, each `bytes[i] % 32` into Crockford's alphabet
+  `0123456789ABCDEFGHJKMNPQRSTVWXYZ` (no I, L, O, U); exactly 8 bytes, else a `RangeError`. The API passes
+  `crypto.getRandomValues(new Uint8Array(8))`, so core stays free of platform APIs.
+- `normalizePickupCode(text): string | null` — what staff typed: trimmed, upper-cased, `I`/`L` → `1`, `O` → `0`,
+  hyphens and spaces removed; `null` unless the result is 8 alphabet characters. `PickupCodeSchema` matches the
+  canonical form.
+
+### 8.4 Holds and Stripe's clock
 Our hold is 10 minutes; Stripe's shortest session expiry is 30 minutes (§17). The sequence every minute:
 1. `release_expired_holds()` moves expired holds to `expired` and frees their items (one SQL call).
 2. For each returned order, `stripe.checkout.sessions.expire(sessionId)`. A session that is already complete throws; the
@@ -459,7 +503,7 @@ No design system beyond Tailwind defaults and one accent colour. No dark mode wo
 | Code | HTTP | Where |
 |---|---|---|
 | `validation` | 400 | any body or query that fails its Zod schema (with the issues) |
-| `unknown_item`, `item_inactive`, `unknown_option`, `option_count`, `options_on_combo`, `quantity_out_of_range`, `too_many_lines`, `empty_cart`, `invalid_price` | 400 | `POST /quotes`, `POST /orders` |
+| `empty_cart`, `too_many_lines`, `unknown_item`, `item_inactive`, `options_on_combo`, `unknown_option`, `duplicate_option`, `option_count`, `quantity_out_of_range`, `invalid_price` | 400 | `POST /quotes`, `POST /orders` |
 | `promo_invalid` | 400 | same |
 | `closed_day`, `too_far`, `slot_not_on_grid`, `slot_past_cutoff`, `slot_too_soon`, `too_many_items` | 409 | `POST /orders` |
 | `slot_full` | 409 | `POST /orders` (from `place_hold`) |
@@ -475,7 +519,7 @@ No design system beyond Tailwind defaults and one accent colour. No dark mode wo
 
 | Layer | What | How |
 |---|---|---|
-| Unit, `core` | **Slots:** the grid for each weekday of the seed, a day with two ranges, "24:00", the 44/92/100 DST counts and labels, the non-existent and ambiguous opening times, earliest start (exact grid point, mid-slot, across the DST gap), cut-off with a config where it matters (prep 0, cut-off 10), horizon edges in Berlin time with the process in UTC, `dayStatus` for every value, `listSlots` reasons, `checkSlot` error order, `holdExpiry`. **Pricing:** every `CartError`, deltas (0, positive, negative), min/max groups, the worked example of §7.4, VAT rounding on a table of hand-computed cases (e.g. 1 cent, 100, 1000, 1999 at 7 and 19), percent and fixed promos, the largest-remainder spread (a 10 % discount over 1500/500, 5 % over 333/333/334), a fixed promo larger than the subtotal, the VAT summary summing to the total for random carts (a property test with a seeded generator), combo parts (one per rate, sums equal the discounted line gross), `priceCart` deterministic. **Orders:** `canTransition` over the whole table, pickup codes (8 Crockford chars, no ambiguous letters, 10 000 draws unique). **Schemas:** every API shape round-trips its example. | Vitest in `packages/core`; `now` fixed per test; no network |
+| Unit, `core` | **Slots:** the grid for each weekday of the seed, a day with two ranges, "24:00", the 44/92/100 DST counts and labels, the non-existent and ambiguous opening times, earliest start (exact grid point, mid-slot, across the DST gap), cut-off with a config where it matters (prep 0, cut-off 10), horizon edges in Berlin time with the process in UTC, `dayStatus` for every value, `listSlots` reasons, `checkSlot` error order, `holdExpiry`. **Pricing:** every `CartError`, deltas (0, positive, negative), min/max groups, the worked example of §7.4, VAT rounding on a table of hand-computed cases (e.g. 1 cent, 100, 1000, 1999 at 7 and 19), percent and fixed promos, the largest-remainder spread (a 10 % discount over 1500/500, 5 % over 333/333/334), a fixed promo larger than the subtotal, the VAT summary summing to the total for random carts (a property test with a seeded generator), combo parts (one per rate, sums equal the discounted line gross), `priceCart` deterministic, `itemCount`, `splitVat` and `allocate` directly. **Orders:** `canTransition` over the whole table, pickup codes (8 Crockford chars, no ambiguous letters, 10 000 draws unique). **Schemas:** every API shape round-trips its example. | Vitest in `packages/core`; `now` fixed per test; no network |
 | API | Every route with `app.request()` against the in-memory repository and a fake `Payments`: happy paths, each error code, `GET /slots` releasing expired holds first, `POST /orders` pricing server-side (a tampered total is ignored), `pickupCode` hidden while held, staff token (missing, wrong, right), ready/pickup transitions, the webhook: a real signature built with `stripe.webhooks.generateTestHeaderString` and a test secret, a bad signature, `completed` → paid, the same event twice → one paid order and one event row, `expired` → cancelled only when held, an unknown order → 200, a processing failure removing the event row, the `expired`-then-paid race (re-reserve ok; slot full → refund + cancelled), and the cron handler (release, then expire sessions, a completed session's error ignored). | Vitest in `apps/api`, `app.request()`, fakes; no network |
 | Database | `pnpm test:db` against local Supabase: migrations and seed apply from scratch (`supabase db reset` in `globalSetup`); `reserve_slot` with capacity 1: **50 parallel RPC calls → exactly 1 success, 49 `slot_full`**, `booked = 1`; `place_hold` rolls the reservation back when the insert fails; `release_hold` once and again (no double release); `release_expired_holds` with a fixed `now` (the function takes an optional `p_now` for tests); `reserve_for_paid` ok and full; the invariant of §8.2 after each; RLS: the anon key sees no rows of any table and cannot call the functions. | Vitest in `apps/api` (`test/db/*.test.ts`, own config), `supabase-js` for the parallel calls through PostgREST as production does, `postgres` for assertions; CI runs it with the Supabase CLI |
 | Manual | The phone flow with the test card `4242 4242 4242 4242`, the QR scan from a second phone, the staff board | Before each milestone's review, and against production after each deploy |
