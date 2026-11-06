@@ -170,7 +170,7 @@ board. Spec in §16 before any code.
 | Milestone | State | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | written 2026-11-06, **awaiting review** | — | |
-| M0 | built 2026-11-06, **PR open, awaiting review** | #1 | checks and demo green locally; the Supabase CI job is timing-only until M3 |
+| M0 | built 2026-11-06, **PR open, awaiting review** | #1 | checks and demo green locally; CI: checks 28 s, Supabase stack 1 min 35 s on the runner (timing job, required from M3) |
 | M1 | not started | | |
 | M2 | not started | | |
 | M3 | not started | | |
@@ -180,7 +180,7 @@ board. Spec in §16 before any code.
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
-- 2026-11-06, M0: §14 notes that `compatibility_date = 2026-11-06` enables Node.js compatibility without `nodejs_compat`; written in the M0 commit.
+- 2026-11-06, M0: §14 fixes the CI shape for `test:db` (`supabase start -x …`, 1 min 35 s measured) and notes that `compatibility_date = 2026-11-06` enables Node.js compatibility without `nodejs_compat`; written in the M0 commit.
 
 ## Verification (every milestone)
 1. `pnpm test`, `pnpm typecheck` and `pnpm check` pass; from M3, `pnpm test:db` passes locally and in CI.
