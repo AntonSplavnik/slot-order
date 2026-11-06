@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The Workers runtime types come from `wrangler types` (worker-configuration.d.ts, generated,
+    // git-ignored); no DOM lib, so browser-only APIs fail the typecheck.
+    "lib": ["ES2023"],
+    "types": ["./worker-configuration.d.ts"]
+  },
+  "include": ["src", "test", "worker-configuration.d.ts"]
+}

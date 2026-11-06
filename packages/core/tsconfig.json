@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No @types/node and no DOM: core runs unchanged in the browser, on Workers and under Vitest,
+    // so any platform API used here fails the typecheck (docs/design.md §4 Units).
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src", "test"]
+}

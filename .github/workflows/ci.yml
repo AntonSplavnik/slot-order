@@ -1,0 +1,54 @@
+# The checks on every push to main and every pull request (docs/design.md §14); the deploy jobs
+# arrive in M4 (API, migrations) and M6 (web). Actions are pinned to a release's commit, its tag
+# beside it. A change to Markdown or docs/ alone runs nothing.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm check
+      - run: pnpm test
+
+  # M0 learns how long the local Supabase stack takes on a runner, for the database tests that
+  # arrive in M3 (docs/design.md §14): only Postgres, PostgREST and the gateway, no studio, mail,
+  # storage or realtime. Allowed to fail until M3 makes it a required check.
+  supabase:
+    name: Supabase local (timing)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v3.2.0
+        with:
+          version: latest
+      - run: supabase --version
+      - name: Start Postgres, PostgREST and the gateway
+        run: time supabase start -x studio,imgproxy,inbucket,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api
+      - run: supabase status

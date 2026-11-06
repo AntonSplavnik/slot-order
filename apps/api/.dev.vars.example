@@ -1,0 +1,6 @@
+# Local secrets for `wrangler dev`. Copy to .dev.vars (git-ignored). Production values are set
+# with `wrangler secret put <NAME>` and never written to a file.
+SUPABASE_SERVICE_ROLE_KEY=   # from `supabase status` (the local service_role key)
+STRIPE_SECRET_KEY=sk_test_   # Stripe dashboard, test mode
+STRIPE_WEBHOOK_SECRET=whsec_ # printed by `stripe listen --forward-to localhost:8787/webhooks/stripe`
+STAFF_TOKEN=change-me        # any long random string; the staff board asks for it once
