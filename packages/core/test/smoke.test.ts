@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { CORE_VERSION } from "../src/index";
+import { SlotConfigSchema } from "../src/index";
 
 test("core exports", () => {
-  expect(CORE_VERSION).toBe("0.0.0");
+  expect(SlotConfigSchema).toBeDefined();
 });
