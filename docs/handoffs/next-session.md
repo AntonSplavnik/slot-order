@@ -3,23 +3,22 @@
 **Written:** 2026-11-06, during M1. Overwritten at every step change.
 
 ## Where things stand
-- M0–M2 merged (PRs #1–#3). M3 (Supabase schema, functions, seed, `test:db`) on branch `m3-supabase`: contract
-  written (spec §5 functions with `p_now`, row mapping, harness `apps/api/vitest.db.config.ts`, scripts,
-  `VAT_RATES_DE_2026`); nothing committed; the test agent writes `apps/api/test/db/` from
-  `docs/handoffs/m3-db-tests.md`.
-- Local Supabase is running. `supabase login` done (org LazyPixel, no project yet). Still to come from Anton:
-  Cloudflare (M4), Stripe (M5).
+- M0–M2 merged (PRs #1–#3). M3 at `demo ok, PR open` (PR #4): schema, functions, seed, row mapping, `test:db`
+  (78 green), CI database job. Waiting for Anton's review.
+- Supabase cloud project **not created yet**: the CLI needs `--yes` from an agent run, which Anton must authorise. The
+  generated DB password is in the git-ignored `.env` (`SUPABASE_DB_PASSWORD`). Org id `rdptzsfolrrzuokfqrfr`.
+- Local Supabase is running. Accounts still to come from Anton: Cloudflare (M4), Stripe (M5).
 
 ## Next action
-1. If `apps/api/test/db/` exists: `pnpm test:db` (red: no migrations yet), review the tests against §5, commit
-   `M3: database tests (red)`.
-2. Run the implementer from `docs/handoffs/m3-db-impl.md` (Opus 5.5, xhigh). Review the SQL. `pnpm test:db` green.
-   Commit `M3: schema, functions, seed (green)`.
-3. CI: turn the "Supabase local (timing)" job into the required `test:db` job (`pnpm install`, `supabase start -x …`,
-   `pnpm test:db`). Cloud: `supabase projects create slot-order --org-id rdptzsfolrrzuokfqrfr --region eu-central-1
-   --db-password <generated, into the git-ignored .env as SUPABASE_DB_PASSWORD>`, `supabase link`, `supabase db push`;
-   `gh secret set SUPABASE_ACCESS_TOKEN / SUPABASE_PROJECT_ID / SUPABASE_DB_PASSWORD` for M4's deploy job.
-   Plan Status → `demo ok, PR open`, push, PR, stop for Anton.
+1. On Anton's go-ahead: `set -a; . ./.env; set +a; supabase projects create slot-order --org-id rdptzsfolrrzuokfqrfr
+   --region eu-central-1 --db-password "$SUPABASE_DB_PASSWORD" --yes`; wait for it to be healthy
+   (`supabase projects list`); `supabase link --project-ref <ref>`; `supabase db push`; then
+   `gh secret set SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`, and `SUPABASE_ACCESS_TOKEN` (from
+   `~/.supabase/access-token` or `supabase login`'s token; ask Anton if not on disk). Record in the plan.
+2. When Anton approves and merges PR #4: set M3 to `merged`; start M4 on `m4-api`: §10, §12, §8.2, §4 Units are the
+   contract; schemas `OrderSummary`, `StaffOrder`, `SlotsResponse`, `Menu` response; the `Repository` and `Payments`
+   interfaces with in-memory fakes; brief `docs/handoffs/m4-api-tests.md` (route tests with `app.request()`);
+   test agent → red → implementer → green → deploy job in CI (needs Cloudflare) → PR → stop.
 
 ## Rules in force
 Subagents on Opus 5.5, xhigh/high by difficulty. Plan Status updated at every step. Nothing committed names the

@@ -174,9 +174,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M3 — the database tests are committed red; the implementer runs from `docs/handoffs/m3-db-impl.md`
-(migrations, seed, row mapping). When it reports: review the SQL, `pnpm test:db` green, commit "M3: schema, functions,
-seed (green)" together with the CI job, then the cloud project (needs Anton's go-ahead for `--yes`), PR, stop.
+**Next action:** M3 at `demo ok, PR open` (#4); waiting for Anton's review and for his go-ahead to create the Supabase
+cloud project (`supabase projects create slot-order --org-id rdptzsfolrrzuokfqrfr --region eu-central-1 --db-password
+$SUPABASE_DB_PASSWORD --yes`, password already in the git-ignored `.env`), then `supabase link`, `supabase db push`,
+`gh secret set SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_ID SUPABASE_DB_PASSWORD`. After merge: M4 (Hono API) on
+`m4-api`; it needs Anton's Cloudflare account for the deploy at its end.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -184,7 +186,7 @@ seed (green)" together with the CI job, then the cloud project (needs Anton's go
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
-| M3 | **tests written (red)**; implementation running | — | branch `m3-supabase`; §5 functions with `p_now`, `slot_booked_mismatches`, row mapping; harness `apps/api/vitest.db.config.ts`, `pnpm test:db`; `supabase login` done (org LazyPixel, no project yet) |
+| M3 | **demo ok, PR open** 2026-11-06 | #4 | 78 db tests green twice back to back; CI database job added; cloud project not created yet (needs Anton's go-ahead for the CLI's `--yes`) |
 | M4 | not started | | |
 | M5 | not started | | |
 | M6 | not started | | |
