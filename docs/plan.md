@@ -172,15 +172,16 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M1 — the slot tests are committed red ("M1: slot tests (red)"); a subagent is implementing
-`src/slots/` from `docs/handoffs/m1-slot-impl.md` on branch `m1-slots`. When it reports: review the diff against §6,
-run the checks, commit "M1: slot rules (green)", update this table to `demo ok, PR open`, push, open the PR, stop.
+**Next action:** M1 — the implementation is green; the implementer subagent is applying three follow-ups (host-independent
+`wallToInstant`, `slot_past_cutoff` at `start ≤ now`, a test for the spring-gap guard; see "Spec changes" below). When it
+reports: review the diff, run `pnpm test`, `test:berlin`, `typecheck`, `check`, commit "M1: slot rules (green)", update
+this table to `demo ok, PR open`, push `m1-slots`, open the PR, stop for Anton.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
-| M1 | **tests written (red)**; implementation running | — | branch `m1-slots`; 143 tests in `packages/core/test/slots/` (125 red on the stubs, 18 green: schema rules the stub already had); the test agent caught 3 mistakes in the brief/spec (cut-off arithmetic, DST Sundays, the 24:xx regex) |
+| M1 | **implementation green** (143/143); follow-ups running: host-independent time rule, cut-off-0 boundary, guard test | — | branch `m1-slots`; 143 tests in `packages/core/test/slots/` (125 red on the stubs, 18 green: schema rules the stub already had); the test agent caught 3 mistakes in the brief/spec (cut-off arithmetic, DST Sundays, the 24:xx regex) |
 | M2 | not started | | |
 | M3 | not started | | |
 | M4 | not started | | |
@@ -189,6 +190,7 @@ run the checks, commit "M1: slot rules (green)", update this table to `demo ok, 
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-06, M1 (after the implementer's report): §6.3 wall-clock → instant conversion is core's own `wallToInstant` with a host-independent rule (ambiguous → first occurrence, gap → forward), because `TZDate`'s constructor answers differently on a UTC and a Berlin host; the core suite runs under both `TZ`s in CI. §6.2 `slot_past_cutoff` also when `start ≤ now` (cut-off 0). §6.3 the duplicate-slot guard for a boundary in the spring gap. In the M1 green commit.
 - 2026-11-06, M1 (after the test agent's report): §6.3 the DST days are Sundays, so the 44-slot claim needs Sunday opened; §6.2 ranges may touch, `"24:01"`–`"24:59"` refused, `too_many_items` is the configured capacity. The brief's cut-off example was wrong (12:15 is bookable at 12:00); the tests follow §6.1.
 - 2026-11-06, M1: §6.2 rewritten as the API contract (signatures, `SlotUsage`/`Booked`, reason and error orders); §6.3: an ambiguous wall time resolves to its second occurrence (the draft said first); §4: date-fns versions. In the M1 tests commit.
 - 2026-11-06, M0: §14 fixes the CI shape for `test:db` (`supabase start -x …`, 1 min 35 s measured) and notes that `compatibility_date = 2026-11-06` enables Node.js compatibility without `nodejs_compat`; written in the M0 commit.

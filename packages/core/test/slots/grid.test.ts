@@ -245,14 +245,46 @@ describe("slotGrid", () => {
       expect(labels(grid)).toEqual(["03:30", "03:45"]);
     });
 
-    test("opens an ambiguous opening time at its second occurrence: Sun 02:30–04:00 on 2026-10-25 opens at 02:30 CET", () => {
-      // Pinned on purpose (§6.3): measured with @date-fns/tz 1.5.0, so a library change is noticed.
+    test("opens an ambiguous opening time at its first occurrence: Sun 02:30–04:00 on 2026-10-25 opens at 02:30 CEST", () => {
+      // §6.3: core's wallToInstant (Temporal's "compatible" rule) takes the earlier instant on every host;
+      // 04:00 CET closes at 03:00Z, so both 02:xx hours from 02:30 CEST on are worked.
       const grid = slotGrid(withHours(seedConfig, "sun", [["02:30", "04:00"]]), "2026-10-25");
 
-      expect(grid[0]?.start.toISOString()).toBe("2026-10-25T01:30:00.000Z");
+      expect(grid[0]?.start.toISOString()).toBe("2026-10-25T00:30:00.000Z");
       expect(grid[0]?.label).toBe("02:30");
-      expect(starts(grid)).toEqual(instantsFrom("2026-10-25T01:30:00Z", 6));
-      expect(labels(grid)).toEqual(labelsFrom("02:30", "03:45"));
+      expect(starts(grid)).toEqual(instantsFrom("2026-10-25T00:30:00Z", 10));
+      expect(labels(grid)).toEqual([
+        "02:30",
+        "02:45",
+        "02:00",
+        "02:15",
+        "02:30",
+        "02:45",
+        "03:00",
+        "03:15",
+        "03:30",
+        "03:45",
+      ]);
+    });
+
+    test("never repeats an instant when a close in the spring gap overtakes the next open: Sun 01:00–02:30 and 03:00–04:00 on 2026-03-29", () => {
+      // §6.3: the 02:30 close does not exist and becomes 03:30 CEST (01:30Z), after the second range's
+      // 03:00 CEST (01:00Z) open; the second range's 03:00 and 03:15 fall inside earlier slots and are skipped.
+      const grid = slotGrid(
+        withHours(seedConfig, "sun", [
+          ["01:00", "02:30"],
+          ["03:00", "04:00"],
+        ]),
+        "2026-03-29",
+      );
+
+      expect(new Set(starts(grid)).size).toBe(grid.length);
+      expect(gapsInMinutes(grid)).toEqual(fifteenEach(grid));
+      expect(starts(grid)).toEqual(instantsFrom("2026-03-29T00:00:00Z", 8));
+      expect(labels(grid)).toEqual([
+        ...labelsFrom("01:00", "01:45"),
+        ...labelsFrom("03:00", "03:45"),
+      ]);
     });
   });
 });

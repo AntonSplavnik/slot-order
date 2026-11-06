@@ -6,20 +6,35 @@ import { z } from "zod";
 export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type Weekday = (typeof WEEKDAYS)[number];
 
-/** "HH:MM", 00:00 to 24:00 ("24:00" only as a closing time, §6.2). */
-export const HHMMSchema = z.string().regex(/^(?:[01]\d|2[0-4]):[0-5]\d$/, "expected HH:MM");
+/** "HH:MM", 00:00 to 23:59, or "24:00" ("24:00" only as a closing time, §6.2). Zero-padded, so
+ * two of them compare as times when compared as strings. */
+export const HHMMSchema = z
+  .string()
+  .regex(/^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$/, "expected HH:MM, 00:00 to 24:00");
 
-export const OpeningRangeSchema = z.tuple([HHMMSchema, HHMMSchema]);
+/** `[open, close)`: close after open, so "24:00" can only close (§6.2). */
+export const OpeningRangeSchema = z
+  .tuple([HHMMSchema, HHMMSchema])
+  .refine(([open]) => open !== "24:00", '"24:00" is allowed only as a closing time')
+  .refine(([open, close]) => close > open, "close must be after open");
 export type OpeningRange = z.infer<typeof OpeningRangeSchema>;
 
+/** A weekday's ranges, sorted and not overlapping; touching is fine, as a range is half-open (§6.2). */
+const DayRangesSchema = z
+  .array(OpeningRangeSchema)
+  .refine(
+    (ranges) => ranges.every((range, i) => i === 0 || (ranges[i - 1]?.[1] ?? "") <= range[0]),
+    "ranges must be sorted and must not overlap",
+  );
+
 export const OpeningHoursSchema = z.object({
-  mon: z.array(OpeningRangeSchema),
-  tue: z.array(OpeningRangeSchema),
-  wed: z.array(OpeningRangeSchema),
-  thu: z.array(OpeningRangeSchema),
-  fri: z.array(OpeningRangeSchema),
-  sat: z.array(OpeningRangeSchema),
-  sun: z.array(OpeningRangeSchema),
+  mon: DayRangesSchema,
+  tue: DayRangesSchema,
+  wed: DayRangesSchema,
+  thu: DayRangesSchema,
+  fri: DayRangesSchema,
+  sat: DayRangesSchema,
+  sun: DayRangesSchema,
 });
 export type OpeningHours = z.infer<typeof OpeningHoursSchema>;
 

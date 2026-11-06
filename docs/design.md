@@ -277,13 +277,13 @@ All functions are pure; `now` and the config are arguments. Instants are `Date`s
   `full` (`available < items`).
 - `checkSlot(config, start, items, now, booked): SlotCheck` — the rule behind `POST /orders`, the first error that
   applies in this order: `closed_day` (the day of `start` has no ranges), `too_far`, `slot_not_on_grid` (`start` is not
-  an instant of that day's grid), `slot_past_cutoff` (`now > start − cutoffMinutes`; this also covers any past slot
-  and any past day), `slot_too_soon`, `too_many_items` (`items > capacityPerSlot`: an order never exceeds the configured slot capacity, whatever an older
+  an instant of that day's grid), `slot_past_cutoff` (`start ≤ now` or `now > start − cutoffMinutes`; the first part matters only with
+  `cutoffMinutes: 0`, and covers any past slot and any past day), `slot_too_soon`, `too_many_items` (`items > capacityPerSlot`: an order never exceeds the configured slot capacity, whatever an older
   slot row's capacity says), `slot_full` (`available < items`).
 - `holdExpiry(config, now): Date` — `now + holdMinutes`.
 
-Wall-clock times are turned into instants with `TZDate`'s **numeric** constructor only (`new TZDate(y, m, d, h, min, 0,
-tz)`; `"24:00"` as hour 24). The string constructor without an offset answers differently and is not used.
+Wall-clock times are turned into instants by `wallToInstant` in `src/slots/time.ts` (§6.3), `"24:00"` as the next
+day's midnight; `TZDate` is used only to read an instant's wall clock (labels, days, weekdays).
 
 ### 6.3 DST
 Because the grid is walked in instants, 2026-03-29 (clocks forward) and 2026-10-25 (clocks back) need no special code;
@@ -294,10 +294,16 @@ they need tests:
 - With a 00:00–24:00 test config, 2026-03-29 has 92 slots and 2026-10-25 has 100; no label is missing and no instant
   repeats (the two "02:xx" hours in October are different instants with the same labels, which is right: the kitchen
   works both of them).
-- An opening time that does not exist on the day (02:30 on 2026-03-29) is resolved by `TZDate` by moving it forward an
-  hour (03:30 CEST); an ambiguous one (02:30 on 2026-10-25) resolves to its **second** occurrence (02:30 CET, +01:00).
-  Measured with `@date-fns/tz` 1.5.0 on 2026-11-06 and pinned by a test, so a library upgrade that changes them is
-  noticed. (The draft said "first occurrence"; the library says otherwise, and the spec follows the library.)
+- Wall-clock times are converted to instants by core's own `wallToInstant` (built on `tzOffset` from `@date-fns/tz`),
+  not by `TZDate`'s constructor, because that constructor resolves an ambiguous time differently depending on the
+  **host machine's** timezone (measured with 1.5.0: second occurrence on a UTC host, first on a Berlin host). The rule,
+  the same as Temporal's `compatible` disambiguation and host-independent: a time that does not exist (02:30 on
+  2026-03-29) moves forward by the length of the gap (03:30 CEST); an ambiguous time (02:30 on 2026-10-25) is its
+  **first** occurrence (02:30 CEST, +02:00). Both are pinned by tests, and the core suite runs in CI under `TZ=UTC` and
+  `TZ=Europe/Berlin` with the same results.
+- A range boundary inside the spring gap can make two ranges overlap once converted (a close of 02:30 becomes 03:30,
+  after the next range's 03:00 open): a slot whose start falls inside the previous slot is skipped, so no instant
+  repeats.
 - Earliest start across the boundary: at 2026-03-29 00:50 Berlin with prep 20 and a 24-hour config, the earliest slot is
   01:15; at 01:50 it is 03:15 (02:xx does not exist).
 - `dayStatus` and the horizon use Berlin days, with a test at 23:30 and 00:30 Berlin time while the process runs in UTC.

@@ -127,6 +127,16 @@ describe("checkSlot", () => {
       ).toEqual(accepted("2026-11-09T11:15:00.000Z", "12:15"));
     });
 
+    test("refuses the slot that starts at now even with cut-off 0 and prep 0, and accepts the next one", () => {
+      // §6.2: slot_past_cutoff is `start ≤ now` or `now > start − cutoffMinutes`, as listSlots' past.
+      const config = { ...seedConfig, prepMinutes: 0, cutoffMinutes: 0 };
+
+      expect(check("2026-11-09T11:00:00Z", { config })).toEqual(refused("slot_past_cutoff"));
+      expect(check("2026-11-09T11:15:00Z", { config })).toEqual(
+        accepted("2026-11-09T11:15:00.000Z", "12:15"),
+      );
+    });
+
     test("refuses 12:15 one second after start − cutoff with cutoffConfig (now 12:05:01)", () => {
       expect(
         check("2026-11-09T11:15:00Z", {
