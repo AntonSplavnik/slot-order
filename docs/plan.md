@@ -172,16 +172,15 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M1 — the implementation is green; the implementer subagent is applying three follow-ups (host-independent
-`wallToInstant`, `slot_past_cutoff` at `start ≤ now`, a test for the spring-gap guard; see "Spec changes" below). When it
-reports: review the diff, run `pnpm test`, `test:berlin`, `typecheck`, `check`, commit "M1: slot rules (green)", update
-this table to `demo ok, PR open`, push `m1-slots`, open the PR, stop for Anton.
+**Next action:** M1 is at `demo ok, PR open` (#2); waiting for Anton's review. After his approval and merge: set M1 to
+`merged`, then start M2 (pricing): write the §7 contract (schemas, stubs in `src/pricing/`, `src/orders/`), the
+test brief `docs/handoffs/m2-pricing-tests.md`, and run the test agent (Opus 5.5, xhigh).
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
-| M1 | **implementation green** (143/143); follow-ups running: host-independent time rule, cut-off-0 boundary, guard test | — | branch `m1-slots`; 143 tests in `packages/core/test/slots/` (125 red on the stubs, 18 green: schema rules the stub already had); the test agent caught 3 mistakes in the brief/spec (cut-off arithmetic, DST Sundays, the 24:xx regex) |
+| M1 | **demo ok, PR open** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | not started | | |
 | M3 | not started | | |
 | M4 | not started | | |
