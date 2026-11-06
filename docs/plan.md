@@ -174,16 +174,17 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M2 — the tests are committed red; the implementer runs from `docs/handoffs/m2-pricing-impl.md` on
-`m2-pricing`. When it reports: review the diff against §7/§8, run `test`, `test:berlin`, `typecheck`, `check`, commit
-"M2: pricing and orders (green)", Status → `demo ok, PR open`, push, PR, stop for Anton.
+**Next action:** M2 at `demo ok, PR open` (#3); waiting for Anton's review. After merge: set M2 to `merged`, start M3
+on `m3-supabase` (needs Anton's Supabase account only for the cloud push at the end; local work needs Docker only):
+§5 is the contract; write `supabase/migrations/0001_schema.sql`, `0002_functions.sql`, `seed.sql` test-first via
+`apps/api/test/db/` (brief `docs/handoffs/m3-db-tests.md`), the `test:db` scripts and the CI job.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
-| M2 | **tests written (red)**; implementation running | — | branch `m2-pricing`; 226 new tests (191 red on the stubs, 35 green: schemas and table-coverage checks); the test agent caught the brief's wings-menu arithmetic and 5 silent points in §7, now written |
+| M2 | **demo ok, PR open** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | not started | | |
 | M4 | not started | | |
 | M5 | not started | | |
