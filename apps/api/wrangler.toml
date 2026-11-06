@@ -1,0 +1,17 @@
+# The API Worker (docs/design.md §10, §14). Secrets (SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY,
+# STRIPE_WEBHOOK_SECRET, STAFF_TOKEN) are set with `wrangler secret put`, never written here;
+# locally they live in the git-ignored .dev.vars (copy .dev.vars.example).
+name = "slot-order-api"
+main = "src/index.ts"
+compatibility_date = "2026-11-06"
+
+[observability]
+enabled = true
+
+# Every minute: release expired holds, then expire their Stripe sessions (§8.3).
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+WEB_ORIGIN = "http://localhost:3000"
+SUPABASE_URL = "http://127.0.0.1:54321"

@@ -451,8 +451,9 @@ Test-first: a milestone's tests are written and reviewed before the implementati
 
 ### Checks (every push and pull request)
 `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm check` (Biome), `pnpm test`, then `pnpm test:db` with the
-Supabase CLI (`supabase/setup-cli`, then `supabase db start`; if that proves slow or flaky in M0, a `postgres:17` service
-container with the migrations applied by `psql` instead, and this line changes).
+Supabase CLI: `supabase/setup-cli`, then `supabase start -x studio,imgproxy,inbucket,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api`
+(Postgres, PostgREST and the gateway only). Measured in M0 on `ubuntu-24.04`: 1 min 35 s including the image pulls, so
+no `postgres:17` service container is needed.
 
 ### Deploys (push to `main`, after the checks)
 1. `supabase db push` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`. A migration is always
