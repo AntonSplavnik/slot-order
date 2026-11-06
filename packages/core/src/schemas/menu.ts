@@ -79,3 +79,6 @@ export const MenuSchema = z.object({
   vatRates: VatRatesSchema,
 });
 export type Menu = z.infer<typeof MenuSchema>;
+
+/** Germany since 2026-01-01: restaurant food 7 % (eaten in or taken away), drinks 19 % (§3 VAT, §17). */
+export const VAT_RATES_DE_2026: VatRates = { food: 7, drink: 19 };

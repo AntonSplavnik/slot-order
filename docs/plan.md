@@ -174,24 +174,25 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M2 at `demo ok, PR open` (#3); waiting for Anton's review. After merge: set M2 to `merged`, start M3
-on `m3-supabase` (needs Anton's Supabase account only for the cloud push at the end; local work needs Docker only):
-§5 is the contract; write `supabase/migrations/0001_schema.sql`, `0002_functions.sql`, `seed.sql` test-first via
-`apps/api/test/db/` (brief `docs/handoffs/m3-db-tests.md`), the `test:db` scripts and the CI job.
+**Next action:** M3 — the database tests are committed red; the implementer runs from `docs/handoffs/m3-db-impl.md`
+(migrations, seed, row mapping). When it reports: review the SQL, `pnpm test:db` green, commit "M3: schema, functions,
+seed (green)" together with the CI job, then the cloud project (needs Anton's go-ahead for `--yes`), PR, stop.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
 | Spec, plan, CLAUDE.md | approved 2026-11-06 | — | |
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
-| M2 | **demo ok, PR open** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
-| M3 | not started | | |
+| M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
+| M3 | **tests written (red)**; implementation running | — | branch `m3-supabase`; §5 functions with `p_now`, `slot_booked_mismatches`, row mapping; harness `apps/api/vitest.db.config.ts`, `pnpm test:db`; `supabase login` done (org LazyPixel, no project yet) |
 | M4 | not started | | |
 | M5 | not started | | |
 | M6 | not started | | |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-06, M3 (after the test agent's report): `promo_codes.sort`; §5 notes that PostgREST returns a `NULL` row as an all-null object (M4 checks `id === null`).
+- 2026-11-06, M3 (contract): §5 function signatures take `p_now` / `p_hold_expires_at` / `p_payment_intent_id`; `release_slot` returns the row; `slot_booked_mismatches()` added; `combo_components.sort`; migrations named `<timestamp>_<name>.sql`; the row mapping `apps/api/src/db/rows.ts`; `VAT_RATES_DE_2026` in core; §13 Database row rewritten.
 - 2026-11-06, M2 (after the test agent's report): §7.3 round robin for all-zero weights; §7.4 parts food before drink, a combo's `vatCategory` ignored, a combo line split as one line, worked example 2's decimals corrected; §7.2 line order made explicit, a blank promo code means none. The brief's wings-menu allocation was wrong (600/323/267 is right).
 - 2026-11-06, M2 (contract): §7 rewritten with §7.6 as the API contract (`priceCart(menu, cart)`, the VAT rates inside the `Menu`, `allocate`, `splitVat`, `itemCount`; a combo counts as one item; `duplicate_option` added; promo matching rule; the second worked example with `HAHN10`); §8.3 the orders API (`pickupCode(bytes)`, `normalizePickupCode`); §5 the seed's ids. `OrderSummary` and `StaffOrder` move from M2 to M4 in the plan.
 - 2026-11-06, M1 (after the implementer's report): §6.3 wall-clock → instant conversion is core's own `wallToInstant` with a host-independent rule (ambiguous → first occurrence, gap → forward), because `TZDate`'s constructor answers differently on a UTC and a Berlin host; the core suite runs under both `TZ`s in CI. §6.2 `slot_past_cutoff` also when `start ≤ now` (cut-off 0). §6.3 the duplicate-slot guard for a boundary in the spring gap. In the M1 green commit.

@@ -108,8 +108,8 @@ phone / laptop ── Next.js on Cloudflare (apps/web) ── fetch ──▶ Ho
 - **`apps/web`** (`@slot-order/web`): screens only. It imports `core` for the schemas and for pricing the cart locally
   (the server re-prices on order), and calls the API through one small client (`src/lib/api.ts`). `next.config`
   lists `@slot-order/core` in `transpilePackages`.
-- **`supabase/`**: plain SQL migrations (numbered), the SQL functions, the seed. Applied locally with `supabase db reset`,
-  to the cloud with `supabase db push` from CI.
+- **`supabase/`**: plain SQL migrations (`<timestamp>_<name>.sql`, as the CLI orders them), the SQL functions, the seed.
+  Applied locally with `supabase db reset`, to the cloud with `supabase db push` from CI.
 
 ### Technology
 | Part | Choice |
@@ -160,9 +160,9 @@ Only `kind = 'item'` rows have groups; combos have none (CHECK by trigger is ove
 
 ### `options` — `id` text PK, `group_id` → `option_groups`, `name`, `price_delta_cents` (may be 0 or negative), `sort`.
 
-### `combo_components` — `combo_id` → `menu_items`, `item_id` → `menu_items`, `quantity` int; PK `(combo_id, item_id)`.
+### `combo_components` — `combo_id` → `menu_items`, `item_id` → `menu_items`, `quantity` int, `sort` int; PK `(combo_id, item_id)`.
 
-### `promo_codes` — `code` text PK (upper case), `kind` (`percent` or `fixed`), `value` int (0–100, or cents), `active` bool.
+### `promo_codes` — `code` text PK (upper case), `kind` (`percent` or `fixed`), `value` int (0–100, or cents), `active` bool, `sort` int.
 
 ### `slots`
 | Column | Type | Note |
@@ -190,30 +190,52 @@ Only `kind = 'item'` rows have groups; combos have none (CHECK by trigger is ove
 | `cancel_reason` | text, null | `stripe_failed`, `session_expired`, `refunded_slot_full` |
 | `created_at`, `paid_at`, `ready_at`, `picked_up_at`, `expired_at`, `cancelled_at` | timestamptz | |
 
-Indexes: `(slot_start)`, `(status, hold_expires_at)` for the cron.
+Indexes: `(slot_start)`, `(status, hold_expires_at)` for the cron. `settings` has `CHECK (id = 1)`: one row, ever.
 
 ### `stripe_events` — `id` text PK (Stripe's `evt_…`), `type` text, `order_id` uuid null, `received_at` timestamptz.
 
-### SQL functions (`supabase/migrations/0002_functions.sql`)
-- `reserve_slot(p_starts_at timestamptz, p_items int, p_capacity int) returns slots`: `INSERT … ON CONFLICT DO NOTHING`,
-  then `UPDATE slots SET booked = booked + p_items WHERE starts_at = p_starts_at AND booked + p_items <= capacity RETURNING *`.
-  No row updated → `RAISE EXCEPTION 'slot_full'`. The row lock of the `UPDATE` serialises concurrent callers; the
-  `WHERE` makes the losers fail instead of overbooking.
-- `place_hold(p_order jsonb, p_capacity int) returns orders`: calls `reserve_slot` for the order's slot and item count,
-  then inserts the order with `status = 'held'` and `hold_expires_at = now() + hold`. One transaction: a failed insert
-  rolls the reservation back.
-- `release_slot(p_starts_at, p_items)`: `booked = booked − p_items` (the CHECK keeps it ≥ 0).
-- `release_hold(p_order_id uuid, p_status text, p_reason text) returns orders`: `UPDATE orders … WHERE id = … AND
-  status = 'held'` to `expired` or `cancelled`, and `release_slot` for its items. No row → returns null (already
-  moved on; callers treat that as done).
-- `release_expired_holds(p_now timestamptz default now()) returns setof orders`: every `held` order with
-  `hold_expires_at < p_now` through
-  `release_hold(…, 'expired')`, returned so the Worker can expire their Stripe sessions.
-- `reserve_for_paid(p_order_id uuid, p_capacity int) returns orders`: the webhook's second chance (§8.3): for an
-  `expired` order, `reserve_slot` again and set `paid`. Raises `slot_full` when the slot has filled up.
+### SQL functions (`supabase/migrations/20261106120100_functions.sql`)
+All `LANGUAGE plpgsql`, called by the Worker as the service role through PostgREST (`supabase.rpc`), each call its
+own transaction, so an exception rolls back everything the function did. Time is a parameter (`p_now`) wherever the
+rules depend on it, so the tests control it; the API passes `new Date()` from its clock.
 
-The functions are plain `LANGUAGE plpgsql` without `SECURITY DEFINER`: the Worker calls them as the service role.
-`REVOKE EXECUTE … FROM anon, authenticated` keeps them off the public PostgREST API, as RLS keeps the tables.
+- `reserve_slot(p_starts_at timestamptz, p_items int, p_capacity int) returns slots`: `p_items < 1` → `RAISE
+  EXCEPTION 'invalid_items'`; `INSERT INTO slots (starts_at, capacity, booked) VALUES (…, p_capacity, 0) ON CONFLICT DO
+  NOTHING` (an existing row keeps its capacity, §3 Slot rows); then `UPDATE slots SET booked = booked + p_items WHERE
+  starts_at = p_starts_at AND booked + p_items <= capacity RETURNING *`. No row updated → `RAISE EXCEPTION 'slot_full'`.
+  The row lock of the `UPDATE` serialises concurrent callers; the `WHERE` makes the losers fail instead of overbooking.
+- `release_slot(p_starts_at timestamptz, p_items int) returns slots`: `booked = booked − p_items` (the CHECK keeps it ≥ 0).
+- `place_hold(p_order jsonb, p_capacity int, p_hold_expires_at timestamptz) returns orders`: `reserve_slot` for
+  `p_order->>'slot_start'` and `item_count`, then `INSERT INTO orders` with `status = 'held'` and the given expiry.
+  `p_order` keys: `slot_start` (ISO 8601 with offset), `customer_name`, `lines` (array), `receipt` (object),
+  `item_count`, `total_cents`, `promo_code` (or null), `pickup_code`. A failing insert rolls the reservation back.
+- `release_hold(p_order_id uuid, p_status text, p_reason text default null, p_now timestamptz default now())
+  returns orders`: `p_status` must be `expired` or `cancelled` (else `RAISE EXCEPTION 'invalid_status'`); `UPDATE
+  orders SET status = p_status, expired_at | cancelled_at = p_now, cancel_reason = p_reason, hold_expires_at = null
+  WHERE id = p_order_id AND status = 'held' RETURNING *`; when a row was updated, `release_slot` for its items and
+  return it; otherwise return `NULL` (already moved on: callers treat that as done). Through PostgREST a `NULL` row
+  arrives as an object whose every field is `null`, not as `null`: the repository (M4) checks `id === null`.
+- `release_expired_holds(p_now timestamptz default now()) returns setof orders`: every `held` order with
+  `hold_expires_at < p_now`, through `release_hold(id, 'expired', null, p_now)`, returned so the Worker can expire
+  their Stripe sessions.
+- `reserve_for_paid(p_order_id uuid, p_capacity int, p_payment_intent_id text, p_now timestamptz default now())
+  returns orders`: the webhook's second chance (§8.4) for an `expired` order (any other status → `invalid_status`):
+  `reserve_slot` again (raises `slot_full`), then `status = 'paid'`, `paid_at = p_now`, the payment intent stored.
+- `slot_booked_mismatches() returns table (starts_at timestamptz, booked int, counted bigint)`: the slots whose `booked`
+  differs from Σ `item_count` of their orders in `held`, `paid`, `ready`, `picked_up` (§8.2 invariant); empty when
+  all is well. For tests and for operators.
+
+Privileges: `REVOKE EXECUTE` on every function from `public`, `anon` and `authenticated` (Supabase grants them by
+default), so only the service role can call them; RLS keeps anon out of the tables (§3 Trust boundary). The normal
+transitions `held → paid`, `paid → ready`, `paid | ready → picked_up` are conditional `UPDATE`s in the API (§8.2), not
+functions.
+
+### Row mapping (`apps/api/src/db/rows.ts`)
+Pure functions from the tables' row shapes (snake_case, as `supabase-js` returns them) to core's types:
+`menuFromRows({ items, groups, options, components, promoCodes }, vatRates): Menu` (items, groups, options,
+components and promo codes ordered by `sort`; `description` omitted when null; `vatRates` from `VAT_RATES_DE_2026` in core) and
+`slotConfigFromRow(settings): SlotConfig`. A `test:db` test proves the seed maps to the `core` fixtures `seedMenu` and
+`seedConfig` exactly, so the seed and the fixtures cannot drift.
 
 ### Seed (`supabase/seed.sql`)
 Settings: Mon–Sat 11:00–22:00, Sun closed; 15-minute slots; 20 items per slot; prep 20 min; cut-off 5 min; hold 10 min;
@@ -521,7 +543,7 @@ No design system beyond Tailwind defaults and one accent colour. No dark mode wo
 |---|---|---|
 | Unit, `core` | **Slots:** the grid for each weekday of the seed, a day with two ranges, "24:00", the 44/92/100 DST counts and labels, the non-existent and ambiguous opening times, earliest start (exact grid point, mid-slot, across the DST gap), cut-off with a config where it matters (prep 0, cut-off 10), horizon edges in Berlin time with the process in UTC, `dayStatus` for every value, `listSlots` reasons, `checkSlot` error order, `holdExpiry`. **Pricing:** every `CartError`, deltas (0, positive, negative), min/max groups, the worked example of §7.4, VAT rounding on a table of hand-computed cases (e.g. 1 cent, 100, 1000, 1999 at 7 and 19), percent and fixed promos, the largest-remainder spread (a 10 % discount over 1500/500, 5 % over 333/333/334), a fixed promo larger than the subtotal, the VAT summary summing to the total for random carts (a property test with a seeded generator), combo parts (one per rate, sums equal the discounted line gross), `priceCart` deterministic, `itemCount`, `splitVat` and `allocate` directly. **Orders:** `canTransition` over the whole table, pickup codes (8 Crockford chars, no ambiguous letters, 10 000 draws unique). **Schemas:** every API shape round-trips its example. | Vitest in `packages/core`; `now` fixed per test; no network |
 | API | Every route with `app.request()` against the in-memory repository and a fake `Payments`: happy paths, each error code, `GET /slots` releasing expired holds first, `POST /orders` pricing server-side (a tampered total is ignored), `pickupCode` hidden while held, staff token (missing, wrong, right), ready/pickup transitions, the webhook: a real signature built with `stripe.webhooks.generateTestHeaderString` and a test secret, a bad signature, `completed` → paid, the same event twice → one paid order and one event row, `expired` → cancelled only when held, an unknown order → 200, a processing failure removing the event row, the `expired`-then-paid race (re-reserve ok; slot full → refund + cancelled), and the cron handler (release, then expire sessions, a completed session's error ignored). | Vitest in `apps/api`, `app.request()`, fakes; no network |
-| Database | `pnpm test:db` against local Supabase: migrations and seed apply from scratch (`supabase db reset` in `globalSetup`); `reserve_slot` with capacity 1: **50 parallel RPC calls → exactly 1 success, 49 `slot_full`**, `booked = 1`; `place_hold` rolls the reservation back when the insert fails; `release_hold` once and again (no double release); `release_expired_holds` with a fixed `now` (the function takes an optional `p_now` for tests); `reserve_for_paid` ok and full; the invariant of §8.2 after each; RLS: the anon key sees no rows of any table and cannot call the functions. | Vitest in `apps/api` (`test/db/*.test.ts`, own config), `supabase-js` for the parallel calls through PostgREST as production does, `postgres` for assertions; CI runs it with the Supabase CLI |
+| Database | `pnpm test:db` against local Supabase: migrations and seed apply from scratch (`supabase db reset` in `globalSetup`); the seed maps to the `core` fixtures `seedMenu` and `seedConfig` exactly; `reserve_slot` with capacity 1: **50 parallel calls → exactly 1 success, 49 `slot_full`**, `booked = 1`, both through the `postgres` driver (50 connections) and through `supabase-js` as production calls it; capacity 20 with 50 callers → 20 winners; an existing row keeps its capacity; `invalid_items`; `place_hold` returns the held order and rolls the reservation back when the insert fails; `release_hold` once and again (`NULL`, no double release), `invalid_status`; `release_expired_holds(p_now)` releases only the expired holds; `reserve_for_paid` ok and `slot_full`, only from `expired`; `slot_booked_mismatches()` empty after every scenario; the CHECKs on `orders.status` and `slots.booked`, the `stripe_events` primary key; RLS: with the anon key every table reads as empty and every function is refused. | Vitest in `apps/api` (`test/db/*.test.ts`, `vitest.db.config.ts`), `postgres` for the parallel calls and assertions, `supabase-js` for the PostgREST path; files run one at a time; CI runs it with the Supabase CLI (§14) |
 | Manual | The phone flow with the test card `4242 4242 4242 4242`, the QR scan from a second phone, the staff board | Before each milestone's review, and against production after each deploy |
 
 Test-first: a milestone's tests are written and reviewed before the implementation (`docs/plan.md`).
