@@ -174,10 +174,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M4 — the API tests are committed red (171 route tests + a 38-test repository contract on both
-implementations); the implementer runs from `docs/handoffs/m4-api-impl.md`. When it reports: review, run `test`,
-`test:db`, `typecheck`, `check`, commit "M4: Hono API (green)", then deploy (needs Anton's `wrangler login`), curl demo,
-PR, stop.
+**Next action:** M4 at `green, PR open` (#5). Deploy once Anton has run `wrangler login`: generate `STAFF_TOKEN` into
+`.env`, `wrangler secret put SUPABASE_SERVICE_ROLE_KEY` and `STAFF_TOKEN`, set production `SUPABASE_URL` and
+`WEB_ORIGIN` in `wrangler.toml`, `wrangler deploy`, curl the live Worker, record the URL in README and §14; create a
+Cloudflare API token (Workers edit) and `gh secret set CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Then Anton
+reviews and merges; main deploys. After merge: M5 (Stripe) on `m5-stripe`; needs Anton's Stripe test keys.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -186,12 +187,13 @@ PR, stop.
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
-| M4 | **tests written (red)**; implementation running | — | branch `m4-api`; §10 rewritten as the contract (schemas in `core/src/schemas/api.ts`, `Repository` in `apps/api/src/repo/types.ts`, `createApp(deps)`, `runCron`); stubs in place; all three Supabase secrets set |
+| M4 | **green, PR open** 2026-11-07; deploy pending `wrangler login` | #5 | 171 route tests + 38-test repository contract on both implementations; CI deploy job added; the Worker is not live yet |
 | M5 | not started | | |
 | M6 | not started | | |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M4 (after the implementer's report): §10.4 decisions: impossible calendar dates → `validation`; `/slots` releases holds on open days only; `setCheckout` stores the session id until M5; `InvalidStatusError` → `internal`; bad env → 500 with names only. Staff auth moved to §10.5.
 - 2026-11-07, M4 (after the test agent's report): §10.4 preflights pass without the token; §12 three cart codes never reach the API (the schema refuses first); `createdAt` is database time. The test agent mutation-tested its suite with a throwaway reference implementation (6 planted bugs, all caught). Local stack restarted under the linked project name (`supabase link` changed the container prefix).
 - 2026-11-07, M4 (contract): §10 rewritten: the route table with `201` for orders and `checkoutUrl: null` until M5, §10.1 the response schemas (`PublicMenu` without promo codes, `OrderSummary` with state-dependent fields, `StaffBoard` over every grid slot), §10.2 the `Repository` interface with a contract test over both implementations, §10.3 `AppDeps`, §10.4 staff auth; §12 `not_found` for unknown routes; core exports `slotLabel`.
 - 2026-11-07, M3 (cloud): §14 `supabase db push --remote` (CLI 3 targets the local database without the flag; found when the first push applied nothing); the seed applied once with `--include-seed`; the project ref recorded. RLS verified against the cloud: anon reads `[]`, rpc refused `42501`.
