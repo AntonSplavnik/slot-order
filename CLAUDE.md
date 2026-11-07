@@ -44,13 +44,23 @@ pnpm workspace, TypeScript everywhere, no build step for `core` (the apps import
 - `supabase/`: `config.toml`, numbered SQL migrations, `seed.sql`.
 - `.github/workflows/ci.yml`: checks on every push and PR; deploys from `main`.
 
+## Live and secrets
+
+- API: `https://slot-order-api.antonsplavnik.workers.dev` (Cloudflare Worker `slot-order-api`, cron every minute),
+  deployed by CI from `main`. Database: Supabase project `slot-order`, ref `ckvngajrwdijdtjvfblm`, Frankfurt.
+- Git-ignored on the Mac: `.env` (`SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY_CLOUD`,
+  `STAFF_TOKEN_PROD`; Stripe keys from M5) and `apps/api/.dev.vars` (local stack key, dev `STAFF_TOKEN`).
+  Read them with `set -a; . ./.env; set +a`; never print them.
+- GitHub secrets (this repo only): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`. Worker secrets: `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`.
+
 ## Commands
 
 ```sh
 pnpm install
 supabase start                 # local Postgres + PostgREST (Docker)
 supabase db reset              # migrations + seed, from scratch; always before a migration reaches a PR
-pnpm dev                       # wrangler dev (API, :8787) and next dev (web, :3000)
+pnpm dev                       # wrangler dev (API, :8787; reads apps/api/.dev.vars) and next dev (web, :3000, M6)
 stripe listen --forward-to localhost:8787/webhooks/stripe
 pnpm test                      # core + api unit/route tests; no network
 pnpm test:db                   # against local Supabase: migrations, functions, 50-parallel reservation, RLS

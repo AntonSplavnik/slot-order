@@ -110,17 +110,41 @@ production check, CV.
   token.
 
 ### M5: Stripe
-- **Research first:** the `stripe` package on Workers (fetch client, SubtleCrypto provider, `nodejs_compat`); record in
-  §17 and §14.
-- **Tests first:** Checkout Session creation (line items match the receipt to the cent, `expires_at` = +30 min,
-  metadata, URLs; the fake `Payments` records the call), Stripe failure → released hold + 502, the webhook cases of §13
-  (signature with `generateTestHeaderString`, duplicate event, `completed`, `expired`, unknown order, failure removes the
-  event row, the expired-then-paid race with re-reserve and with refund), the cron sequence (§8.3).
-- **Then implement** `src/payments/{types,stripe,fake}.ts`, `src/routes/webhook.ts`, the cron.
-- **Stripe setup:** test keys into `.dev.vars` and Worker secrets; the webhook endpoint in the dashboard for the Worker;
-  `stripe listen` locally.
-- **Demo:** `POST /orders` → open `checkoutUrl` → test card → `GET /orders/:id` is `paid` with a pickup code;
-  `stripe trigger` or a replayed event shows the duplicate answered with `duplicate: true` and one `paid` order.
+- **Research first** (the orchestrator, before the contract): the `stripe` package on Workers: whether the fetch
+  HTTP client is the default or needs `Stripe.createFetchHttpClient()`, `Stripe.createSubtleCryptoProvider()` for
+  `webhooks.constructEventAsync`, whether `nodejs_compat` is needed; Checkout Session `expires_at` minimum (30 min,
+  §17); `checkout.sessions.expire` and `refunds.create` signatures; `stripe.webhooks.generateTestHeaderString` for
+  tests. Record in §17 and §14.
+- **Contract** (spec first, then code): §9 refined into `Payments` in `apps/api/src/payments/types.ts`:
+  `createCheckout(order, receipt, urls: { success, cancel }, now): Promise<{ sessionId, url }>`,
+  `expireSession(sessionId)`, `refund(paymentIntentId)`, `verifyWebhook(rawBody, signature): Promise<StripeEvent>`
+  (a small typed subset: id, type, `data.object.{id, payment_status, payment_intent, metadata.order_id}`);
+  `createStripePayments(stripe, webhookSecret)` and `createFakePayments()` (records calls, can be told to fail, can
+  mint signed test events); migration `supabase/migrations/20261107120000_checkout_url.sql` adding
+  `orders.checkout_url text` (and `Order.checkoutUrl`, `setCheckout` storing it, `OrderSummary.checkoutUrl` while
+  held, `rows.ts`); `AppDeps.payments` required; `Env` with `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
+- **Tests first** (`apps/api/test/routes/webhook.test.ts`, `orders.test.ts` additions, `cron.test.ts` additions,
+  `test/payments/fake.test.ts`, contract additions for `setCheckout`'s URL): Checkout Session creation on
+  `POST /orders` (one line item per priced line with `quantity 1` and the discounted gross, `expires_at` = now + 30
+  min, `metadata.order_id`, `client_reference_id`, the URLs from `WEB_ORIGIN`; `checkoutUrl` in the 201 body and in
+  `GET /orders/:id` while held), Stripe failure → `release_hold(cancelled, stripe_failed)` + 502
+  `payment_unavailable`; the webhook: signature with `generateTestHeaderString` and a test secret, a bad signature →
+  400 `bad_signature`, `checkout.session.completed` (paid) → `held → paid` with the payment intent, the same event
+  twice → one paid order and one `stripe_events` row and `{ duplicate: true }`, `checkout.session.expired` → cancelled
+  only when held, an unknown order → 200, an unhandled type → 200 and recorded, a processing failure → the event row
+  removed and 500, the expired-then-paid race (`reserve_for_paid` ok → paid; `slot_full` → refund + cancelled
+  `refunded_slot_full`); the cron: release, then `expireSession` per released order, an error from Stripe (session
+  already complete) logged and ignored, the count returned.
+- **Then implement** `src/payments/{types,stripe,fake}.ts`, `src/routes/webhook.ts` (raw body, no JSON parsing before
+  verification), the order route's Stripe step, the cron's step 2, the migration, `rows.ts`.
+- **Stripe setup** (Anton): a Stripe account in test mode; `STRIPE_SECRET_KEY` (`sk_test_…`) and, from Developers →
+  Webhooks → add endpoint `https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe` with the events
+  `checkout.session.completed` and `checkout.session.expired`, its signing secret `STRIPE_WEBHOOK_SECRET` (`whsec_…`).
+  Into `.env` (git-ignored) and `wrangler secret put` ×2; locally `apps/api/.dev.vars` and `stripe listen
+  --forward-to localhost:8787/webhooks/stripe` (its own `whsec_` for local).
+- **Demo:** `POST /orders` on the live Worker → open `checkoutUrl` → test card `4242 4242 4242 4242` →
+  `GET /orders/:id` is `paid` with a pickup code; the event replayed from the Stripe dashboard answers
+  `{ duplicate: true }` and the order stays paid once; the cron expires an unpaid hold's session.
 
 ### M6: Web
 - **Tests first** (small; the UI is thin): the cart reducer (add, change options, quantity, remove, persisted), the slot
@@ -174,10 +198,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M4 at `demo ok, PR open` (#5), the Worker live; waiting for Anton's review and merge. The merge triggers
-the deploy job on `main` (migrations, then `wrangler deploy`): check its run. After merge: M5 (Stripe) on `m5-stripe`;
-needs Anton's Stripe test keys (`STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET` from the dashboard's webhook endpoint
-for `https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe`).
+**Next action:** M5 (Stripe) on a new branch `m5-stripe`, following `docs/handoffs/next-session.md` step by step:
+contract first (§9 refined into the `Payments` interface, the `checkout_url` migration, the webhook and cron
+behaviour), then the test brief and the test agent, red commit, implementer, green, Stripe setup with Anton's test
+keys, the demo, PR, stop.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -186,7 +210,7 @@ for `https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe`).
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
-| M4 | **demo ok, PR open** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev` | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
+| M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | not started | | |
 | M6 | not started | | |
 
@@ -205,6 +229,20 @@ for `https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe`).
 - 2026-11-06, M1 (after the test agent's report): §6.3 the DST days are Sundays, so the 44-slot claim needs Sunday opened; §6.2 ranges may touch, `"24:01"`–`"24:59"` refused, `too_many_items` is the configured capacity. The brief's cut-off example was wrong (12:15 is bookable at 12:00); the tests follow §6.1.
 - 2026-11-06, M1: §6.2 rewritten as the API contract (signatures, `SlotUsage`/`Booked`, reason and error orders); §6.3: an ambiguous wall time resolves to its second occurrence (the draft said first); §4: date-fns versions. In the M1 tests commit.
 - 2026-11-06, M0: §14 fixes the CI shape for `test:db` (`supabase start -x …`, 1 min 35 s measured) and notes that `compatibility_date = 2026-11-06` enables Node.js compatibility without `nodejs_compat`; written in the M0 commit.
+
+## Environment notes (learned while building)
+- `supabase link` (2026-11-07) changed the local container prefix to the project ref; the stack was restarted under it.
+  `supabase status` and `pnpm test:db` work normally now; CI is unlinked and uses `config.toml`'s `slot-order`.
+- Supabase CLI 3: `db push`, `migration list` need `--remote` for the linked project; without it they target the local
+  database and print a JSON error. `--yes` is required from an agent run for anything that asks.
+- `supabase db reset` restarts Postgres but PostgREST keeps stale connections for ~30 s: `apps/api/test/db/setup.ts`
+  warms PostgREST up, so back-to-back `pnpm test:db` runs are green.
+- `wrangler dev` overrides `[vars]` with `apps/api/.dev.vars`, so `wrangler.toml` carries production values
+  (`SUPABASE_URL` of the cloud project) and `.dev.vars` the local ones.
+- `brew upgrade` of `gh` made the binary vanish mid-command once; retry with `/opt/homebrew/bin/gh` or wait.
+- GitHub takes 1–2 minutes to schedule a PR's workflow; "no checks reported" right after a push is normal.
+- Secrets never printed: the `.env` and `.dev.vars` files are read with `set -a; . ./.env; set +a` and piped into
+  `wrangler secret put` / `gh secret set --body`.
 
 ## Verification (every milestone)
 1. `pnpm test`, `pnpm typecheck` and `pnpm check` pass; from M3, `pnpm test:db` passes locally and in CI.
