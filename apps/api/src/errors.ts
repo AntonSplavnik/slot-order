@@ -1,6 +1,7 @@
 import { type ApiError as ApiErrorBody, type ApiErrorCode, CartError } from "@slot-order/core";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { ZodError } from "zod";
+import { BadSignatureError } from "./payments/types";
 import { SlotFullError } from "./repo/types";
 
 // Errors (docs/design.md §12): every error answers JSON `{ error: { code, message, lineIndex?, issues? } }`
@@ -101,13 +102,16 @@ export class ApiError extends Error {
 }
 
 /**
- * §12's mapping: `CartError` → 400 with its code and line, `SlotFullError` → 409 `slot_full`, `ZodError`
- * → 400 `validation` with Zod's issues; anything else → 500 `internal`, whose message says nothing of it.
+ * §12's mapping: `CartError` → 400 with its code and line, `SlotFullError` → 409 `slot_full`,
+ * `BadSignatureError` → 400 `bad_signature`, `ZodError` → 400 `validation` with Zod's issues; anything
+ * else (a `PaymentsError` included: the order route answers its own 502) → 500 `internal`, whose
+ * message says nothing of it.
  */
 export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof CartError) return new ApiError(error.code, { lineIndex: error.lineIndex });
   if (error instanceof SlotFullError) return new ApiError("slot_full");
+  if (error instanceof BadSignatureError) return new ApiError("bad_signature");
   if (error instanceof ZodError) return new ApiError("validation", { issues: error.issues });
   return new ApiError("internal");
 }

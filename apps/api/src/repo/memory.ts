@@ -237,6 +237,7 @@ export function createMemoryRepository(seed: { settings: SlotConfig; menu: Menu 
           promoCode: order.promoCode,
           pickupCode: order.pickupCode,
           stripeSessionId: null,
+          checkoutUrl: null,
           stripePaymentIntentId: null,
           holdExpiresAt: new Date(holdExpiresAt),
           cancelReason: null,
@@ -278,12 +279,16 @@ export function createMemoryRepository(seed: { settings: SlotConfig; menu: Menu 
     async transition(id, from, to, at, patch: TransitionPatch = {}) {
       const statuses: readonly OrderStatus[] = typeof from === "string" ? [from] : from;
       const instant = new Date(at);
+      // The `*_at` column of the target status (§8.2); `cancelled` is the refund case's `expired →
+      // cancelled` (§9.3), which leaves the slot alone.
       const stamped: Partial<Order> =
         to === "paid"
           ? { paidAt: instant }
           : to === "ready"
             ? { readyAt: instant }
-            : { pickedUpAt: instant };
+            : to === "picked_up"
+              ? { pickedUpAt: instant }
+              : { cancelledAt: instant };
       return atomic(() => {
         const moved = updateOrder(
           id,
@@ -294,6 +299,7 @@ export function createMemoryRepository(seed: { settings: SlotConfig; menu: Menu 
             ...(patch.stripePaymentIntentId === undefined
               ? {}
               : { stripePaymentIntentId: patch.stripePaymentIntentId }),
+            ...(patch.cancelReason === undefined ? {} : { cancelReason: patch.cancelReason }),
           }),
         );
         return moved === null ? null : copy(moved);
@@ -342,14 +348,13 @@ export function createMemoryRepository(seed: { settings: SlotConfig; menu: Menu 
       });
     },
 
-    // M5 adds the URL's column (the contract pins only the session id until then); like the Supabase
-    // repository, this one stores the session id alone.
-    async setCheckout(id, sessionId, _checkoutUrl) {
+    // `stripe_session_id` and `checkout_url` (§9.1), on an order in any status (§10.2).
+    async setCheckout(id, sessionId, checkoutUrl) {
       atomic(() => {
         updateOrder(
           id,
           () => true,
-          () => ({ stripeSessionId: sessionId }),
+          () => ({ stripeSessionId: sessionId, checkoutUrl }),
         );
       });
     },

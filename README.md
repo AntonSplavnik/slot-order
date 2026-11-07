@@ -15,8 +15,8 @@ first, AI agents writing against the tests, every milestone reviewed before the 
 ```
 browser ── Next.js (M6) ──▶ Hono on Cloudflare Workers (apps/api) ──▶ Supabase Postgres (supabase/)
                               │  every route: validate with a core schema → call core → repository → map
-                              ├──▶ Stripe Checkout + webhook (M5)
-                              └── Cron Trigger every minute: release expired holds
+                              ├──▶ Stripe Checkout (test mode) + idempotent webhook
+                              └── Cron Trigger every minute: release expired holds, expire their sessions
 ```
 
 - **`packages/core`**: the rules, pure TypeScript with no I/O: slots (grid, DST, prep time, cut-off, horizon),
@@ -38,19 +38,21 @@ Prerequisites: Node 24+, pnpm 11 (pinned in `packageManager`), Docker, the Supab
 pnpm install
 supabase start                 # local Postgres + PostgREST in Docker
 supabase db reset              # migrations + the Goldhahn seed, from scratch
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # local service-role key from `supabase status`, a STAFF_TOKEN
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # local service-role key from `supabase status`, a STAFF_TOKEN,
+                               # Stripe test keys (sk_test_…, and the whsec_ printed by `stripe listen`)
 pnpm dev                       # the API on http://localhost:8787 (and the web app on :3000 from M6)
+stripe listen --forward-to localhost:8787/webhooks/stripe   # another terminal: Stripe's events reach the local API
 curl localhost:8787/health     # {"ok":true}
 curl localhost:8787/menu       # the Goldhahn menu from the local database
 curl "localhost:8787/slots?date=2026-11-09"
 ```
 
-_Stripe and the web app are wired in during M5–M6._
+_The web app is wired in during M6._
 
 ## Tests
 
 ```sh
-pnpm test        # core (373) and API route tests (171, in-memory repository); no network, no database
+pnpm test        # core (373) and API tests (287: routes, webhook, payments, in-memory repository); no network
 pnpm --filter @slot-order/core test:berlin   # the core suite again with the process in Berlin time (§6.3)
 pnpm typecheck   # TypeScript, with the Workers runtime types from `wrangler types`
 pnpm check       # Biome lint and format (`pnpm format` fixes)
@@ -67,10 +69,11 @@ pnpm test:db     # against local Supabase: migrations, seed, the SQL functions, 
                  # and the repository contract against the real database
 ```
 
-The database suite (`apps/api/test/db/`, 78 tests) resets the local stack from the migrations and seed, maps the seed
+The database suite (`apps/api/test/db/`, 122 tests) resets the local stack from the migrations and seed, maps the seed
 back onto the core fixtures so they cannot drift, races 50 connections for the last place in a slot (exactly one wins,
 also through PostgREST as production calls it), exercises every hold function with the booked-items invariant checked
-after each, and proves the anon key reads nothing and can call nothing.
+after each, runs the repository contract against the real database, and proves the anon key reads nothing and can call
+nothing.
 
 ## What the agent got wrong and what I changed
 

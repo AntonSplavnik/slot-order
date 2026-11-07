@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { staffAuth } from "./auth";
 import { ApiError, toApiError } from "./errors";
+import type { Payments } from "./payments/types";
 import type { Repository } from "./repo/types";
 import { healthRoutes } from "./routes/health";
 import { menuRoutes } from "./routes/menu";
@@ -9,17 +10,20 @@ import { orderRoutes } from "./routes/orders";
 import { quoteRoutes } from "./routes/quotes";
 import { slotRoutes } from "./routes/slots";
 import { staffRoutes } from "./routes/staff";
+import { webhookRoutes } from "./routes/webhook";
 
 export { runCron } from "./cron";
 
-// The app and its dependencies (docs/design.md §10.3). Routes read the clock only through `now` and
-// random bytes only through `randomBytes`; src/index.ts builds the real ones, the tests their own.
+// The app and its dependencies (docs/design.md §10.3). Routes read the clock only through `now`, random
+// bytes only through `randomBytes` and Stripe only through `payments`; src/index.ts builds the real
+// ones, the tests their own.
 export type AppDeps = {
   repo: Repository;
   now: () => Date;
   staffToken: string;
   webOrigin: string;
   randomBytes: (n: number) => Uint8Array;
+  payments: Payments;
 };
 
 /** The web app in `pnpm dev` (§11), allowed next to WEB_ORIGIN (§10). */
@@ -44,6 +48,7 @@ export function createApp(deps: AppDeps) {
   app.route("/", slotRoutes(deps));
   app.route("/", quoteRoutes(deps));
   app.route("/", orderRoutes(deps));
+  app.route("/", webhookRoutes(deps));
   app.route("/staff", staffRoutes(deps));
 
   app.notFound((c) => {

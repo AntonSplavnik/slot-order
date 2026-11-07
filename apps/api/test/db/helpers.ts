@@ -80,6 +80,7 @@ export type OrderRow = {
   promo_code: string | null;
   pickup_code: string;
   stripe_session_id: string | null;
+  checkout_url: string | null;
   stripe_payment_intent_id: string | null;
   hold_expires_at: Date | null;
   cancel_reason: string | null;

@@ -37,9 +37,9 @@ export function orderSummary(order: Order, config: SlotConfig): OrderSummary {
     receipt: order.receipt,
     createdAt: iso(order.createdAt),
     ...(CODE_VISIBLE.has(order.status) ? { pickupCode: order.pickupCode } : {}),
-    // The Checkout Session's URL arrives with M5 (§9.1); until then a held order has none.
+    // The Checkout Session's URL (§9.1): null until `setCheckout` stored one.
     ...(order.status === "held"
-      ? { checkoutUrl: null, ...stamp("holdExpiresAt", order.holdExpiresAt) }
+      ? { checkoutUrl: order.checkoutUrl, ...stamp("holdExpiresAt", order.holdExpiresAt) }
       : {}),
     ...(order.status === "cancelled" && order.cancelReason !== null
       ? { cancelReason: order.cancelReason }

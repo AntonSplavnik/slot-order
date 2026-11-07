@@ -28,7 +28,12 @@ import {
 // PostgREST's message (never a key: the client keeps those in its headers).
 
 /** The `*_at` column `transition` stamps for each target status (§8.2). */
-const STAMP_COLUMN = { paid: "paid_at", ready: "ready_at", picked_up: "picked_up_at" } as const;
+const STAMP_COLUMN = {
+  paid: "paid_at",
+  ready: "ready_at",
+  picked_up: "picked_up_at",
+  cancelled: "cancelled_at",
+} as const;
 
 /** PostgREST's answer for a unique violation. */
 const UNIQUE_VIOLATION = "23505";
@@ -138,6 +143,7 @@ export function createSupabaseRepository(client: SupabaseClient): Repository {
           ...(patch.stripePaymentIntentId === undefined
             ? {}
             : { stripe_payment_intent_id: patch.stripePaymentIntentId }),
+          ...(patch.cancelReason === undefined ? {} : { cancel_reason: patch.cancelReason }),
         })
         .eq("id", id)
         .in("status", typeof from === "string" ? [from] : from)
@@ -171,11 +177,11 @@ export function createSupabaseRepository(client: SupabaseClient): Repository {
       return orderFromRow(dataOf<OrderRow>("reserve_for_paid", result));
     },
 
-    // M5 adds the URL's column; until then the session id is what is stored (the contract pins only it).
-    async setCheckout(id, sessionId, _checkoutUrl) {
+    // `stripe_session_id` and `checkout_url` (§9.1), on an order in any status (§10.2).
+    async setCheckout(id, sessionId, checkoutUrl) {
       const result = await client
         .from("orders")
-        .update({ stripe_session_id: sessionId })
+        .update({ stripe_session_id: sessionId, checkout_url: checkoutUrl })
         .eq("id", id);
       dataOf("set checkout", result);
     },

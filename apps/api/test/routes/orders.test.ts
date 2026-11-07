@@ -10,15 +10,18 @@ import {
 } from "@slot-order/core";
 import { describe, expect, test } from "vitest";
 import { runCron } from "../../src/app";
+import { createMemoryRepository } from "../../src/repo/memory";
 import {
   BURGER,
   byLabel,
+  checkoutUrlOf,
   colas,
   DAY,
   expectError,
   expectJson,
   line,
   makeApp,
+  NOW,
   orderBody,
   payOrder,
   pickupCodeOf,
@@ -26,22 +29,28 @@ import {
   request,
   S,
   STAFF_TOKEN,
+  seconds,
+  seedConfig,
   seedMenu,
   type TestApp,
   type TestDeps,
   UNKNOWN_ID,
   UUID,
   usageAt,
+  WEB_ORIGIN,
 } from "../helpers/app";
 
 // docs/design.md §10 (POST /orders, in order: validate, price, settings, usage, checkSlot, pickup code,
-// placeHold; GET /orders/:id), §10.1 (CreateOrderRequest, OrderSummary: fields only in the states that
-// have them), §8.2–§8.3, §6.2 checkSlot, §12. The seed; now = Mon 2026-11-09 12:00 Berlin (11:00Z) unless
-// a test moves the clock; S = 12:30 Berlin.
+// placeHold, then the Checkout Session and setCheckout; GET /orders/:id), §10.1 (CreateOrderRequest,
+// CreateOrderResponse, OrderSummary: fields only in the states that have them), §8.2–§8.3, §9.1 (the
+// Checkout Session), §6.2 checkSlot, §12. The seed; now = Mon 2026-11-09 12:00 Berlin (11:00Z) unless a
+// test moves the clock; S = 12:30 Berlin; the fake payments answer the sessions cs_test_1, cs_test_2, …
 
 /** An ISO instant in UTC (§10.1: responses always end in Z). */
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 const HOLD_EXPIRES_AT = "2026-11-09T11:10:00.000Z";
+/** The first order's Checkout Session URL (the fake's cs_test_1, §9.4). */
+const CHECKOUT_URL_1 = checkoutUrlOf("cs_test_1");
 
 async function postOrder(app: TestApp, body: unknown) {
   return request(app, "POST", "/orders", { body });
@@ -71,7 +80,7 @@ describe("POST /orders holds a slot", () => {
     // place_hold stamps created_at with the database's now(), and createMemoryRepository gets no clock, so
     // createdAt is the repository's time, not deps.now(). Pinned as a UTC instant that GET repeats.
     expect(body).toEqual({
-      checkoutUrl: null,
+      checkoutUrl: CHECKOUT_URL_1,
       order: {
         id: expect.stringMatching(UUID),
         status: "held",
@@ -81,7 +90,7 @@ describe("POST /orders holds a slot", () => {
         itemCount: 1,
         receipt: priceCart(seedMenu, BURGER),
         createdAt: expect.stringMatching(ISO_UTC),
-        checkoutUrl: null,
+        checkoutUrl: CHECKOUT_URL_1,
         holdExpiresAt: HOLD_EXPIRES_AT,
       },
     });
@@ -167,6 +176,225 @@ describe("POST /orders holds a slot", () => {
     expect(summary.status).toBe(200);
     expect(summary.json).not.toHaveProperty("pickupCode");
     expect(summary.text).not.toContain(pickupCodeOf(1));
+  });
+});
+
+describe("POST /orders creates the Checkout Session after the hold (§9.1, §8.2, §10)", () => {
+  /** §9.1: expires_at = now + 31 minutes in epoch seconds; now = 11:00:00Z. */
+  const EXPIRES_AT = seconds(new Date("2026-11-09T11:31:00Z"));
+
+  /** A line item of §9.1: quantity 1, the line's discounted gross, the name with options and quantity. */
+  function lineItem(name: string, unitAmount: number) {
+    return {
+      quantity: 1,
+      price_data: { currency: "eur", unit_amount: unitAmount, product_data: { name } },
+    };
+  }
+
+  /** The literal Checkout Session parameters of §9.1 for order `id`, with `lineItems`. */
+  function sessionParams(id: string, lineItems: ReturnType<typeof lineItem>[]) {
+    return {
+      mode: "payment",
+      client_reference_id: id,
+      metadata: { order_id: id },
+      expires_at: EXPIRES_AT,
+      success_url: `${WEB_ORIGIN}/orders/${id}?paid=1`,
+      cancel_url: `${WEB_ORIGIN}/orders/${id}`,
+      line_items: lineItems,
+    };
+  }
+
+  /** Chicken Burger ×2, large with garlic sauce, and Cola ×3: 5 items, 2 lines, 27.50. */
+  const TWO_LINES: Cart = {
+    lines: [
+      line("chicken-burger", { quantity: 2, options: ["burger-large", "sauce-garlic"] }),
+      line("cola", { quantity: 3 }),
+    ],
+  };
+
+  test("201: the session's URL at the top and in the held summary; the order stores its session id and URL", async () => {
+    const { app, deps } = makeApp();
+    const body = expectJson(await postOrder(app, orderBody()), 201, CreateOrderResponseSchema);
+    expect(body.checkoutUrl).toBe(CHECKOUT_URL_1);
+    expect(body.order.checkoutUrl).toBe(CHECKOUT_URL_1);
+    expect(await deps.repo.getOrder(body.order.id)).toMatchObject({
+      status: "held",
+      stripeSessionId: "cs_test_1",
+      checkoutUrl: CHECKOUT_URL_1,
+    });
+  });
+
+  test("GET /orders/:id repeats the URL while held; once paid there is no checkoutUrl and no holdExpiresAt", async () => {
+    const { app, deps } = makeApp();
+    const order = await placeOrder(app);
+    const held = expectJson(await getOrder(app, order.id), 200, OrderSummarySchema);
+    expect(held).toMatchObject({ status: "held", checkoutUrl: CHECKOUT_URL_1 });
+
+    deps.clock.set("2026-11-09T11:03:00Z");
+    await payOrder(deps, order.id);
+    const paid = expectJson(await getOrder(app, order.id), 200, OrderSummarySchema);
+    expect(paid.status).toBe("paid");
+    expect(paid).not.toHaveProperty("checkoutUrl");
+    expect(paid).not.toHaveProperty("holdExpiresAt");
+    // The stored order keeps its session (§10.2 Order); only the summary hides the URL.
+    expect(await deps.repo.getOrder(order.id)).toMatchObject({
+      stripeSessionId: "cs_test_1",
+      checkoutUrl: CHECKOUT_URL_1,
+    });
+  });
+
+  test("the second order of a test gets the second session, cs_test_2", async () => {
+    const { app, deps } = makeApp();
+    await placeOrder(app);
+    const body = expectJson(
+      await postOrder(app, orderBody({ customerName: "Grace" })),
+      201,
+      CreateOrderResponseSchema,
+    );
+    expect(body.checkoutUrl).toBe(checkoutUrlOf("cs_test_2"));
+    expect(body.order.checkoutUrl).toBe(checkoutUrlOf("cs_test_2"));
+    expect(await deps.repo.getOrder(body.order.id)).toMatchObject({
+      stripeSessionId: "cs_test_2",
+      checkoutUrl: checkoutUrlOf("cs_test_2"),
+    });
+  });
+
+  test("createCheckout is called once, with exactly the §9.1 parameters for one Burger Menu", async () => {
+    const { app, deps } = makeApp();
+    const order = await placeOrder(app, { customerName: "Ada Lovelace" });
+    expect(deps.payments.calls.createCheckout).toEqual([
+      { orderId: order.id, params: sessionParams(order.id, [lineItem("Burger Menu", 1290)]) },
+    ]);
+  });
+
+  test("the customer's name is not sent to Stripe (§9.1)", async () => {
+    const { app, deps } = makeApp();
+    await placeOrder(app, { customerName: "Ada Lovelace" });
+    expect(deps.payments.calls.createCheckout).toHaveLength(1);
+    const sent = JSON.stringify(deps.payments.calls.createCheckout);
+    expect(sent).not.toContain("Ada");
+    expect(sent).not.toContain("Lovelace");
+  });
+
+  test.each<{ name: string; cart: Cart; totalCents: number; items: [string, number][] }>([
+    {
+      name: "Chicken Burger ×2 (large, garlic) and Cola ×3",
+      cart: TWO_LINES,
+      totalCents: 2750,
+      items: [
+        ["2 × Chicken Burger (large, garlic)", 1880],
+        ["3 × Cola 0.33 l", 870],
+      ],
+    },
+    {
+      name: "the same cart with HAHN10",
+      cart: { ...TWO_LINES, promoCode: "HAHN10" },
+      totalCents: 2475,
+      items: [
+        ["2 × Chicken Burger (large, garlic)", 1692],
+        ["3 × Cola 0.33 l", 783],
+      ],
+    },
+    {
+      name: "one Burger Menu with HAHN10",
+      cart: { ...BURGER, promoCode: "HAHN10" },
+      totalCents: 1161,
+      items: [["Burger Menu", 1161]],
+    },
+  ])(
+    "line items for $name: one per priced line, quantity 1, summing to the total",
+    async ({ cart, totalCents, items }) => {
+      const { app, deps } = makeApp();
+      const order = await placeOrder(app, cart);
+      expect(order.receipt.totalCents).toBe(totalCents);
+      const [call] = deps.payments.calls.createCheckout;
+      expect(call?.params).toEqual(
+        sessionParams(
+          order.id,
+          items.map(([name, cents]) => lineItem(name, cents)),
+        ),
+      );
+      const amounts = (call?.params.line_items ?? []).map(
+        (item) => item.price_data?.unit_amount ?? 0,
+      );
+      expect(amounts.reduce((sum, cents) => sum + cents, 0)).toBe(order.receipt.totalCents);
+    },
+  );
+
+  test("Stripe fails: 502 payment_unavailable; the hold is released as cancelled with stripe_failed", async () => {
+    const { app, deps } = makeApp();
+    deps.payments.fail("createCheckout");
+    expectError(await postOrder(app, orderBody()), 502, "payment_unavailable");
+
+    const orders = await allOrders(deps);
+    expect(orders).toHaveLength(1);
+    const [order] = orders;
+    expect(order).toMatchObject({
+      status: "cancelled",
+      cancelReason: "stripe_failed",
+      cancelledAt: new Date(NOW),
+      holdExpiresAt: null,
+      stripeSessionId: null,
+      checkoutUrl: null,
+    });
+    expect(deps.payments.calls.createCheckout).toHaveLength(1);
+    expect(deps.payments.calls.createCheckout[0]?.orderId).toBe(order?.id);
+    expect(await usageAt(deps, S)).toEqual({ booked: 0, capacity: 20 });
+
+    const summary = expectJson(await getOrder(app, order?.id ?? ""), 200, OrderSummarySchema);
+    expect(summary).toEqual({
+      id: order?.id,
+      status: "cancelled",
+      slotStart: S,
+      slotLabel: "12:30",
+      customerName: "Ada",
+      itemCount: 1,
+      receipt: priceCart(seedMenu, BURGER),
+      createdAt: expect.stringMatching(ISO_UTC),
+      cancelReason: "stripe_failed",
+      cancelledAt: NOW,
+    });
+  });
+
+  test("Stripe is called only once the slot is held: refused orders (409, 400) add no createCheckout call", async () => {
+    const { app, deps } = makeApp();
+    const full = await placeOrder(app, colas(20));
+    expectError(await postOrder(app, orderBody()), 409, "slot_full");
+    expectError(
+      await postOrder(app, orderBody({ slotStart: "2026-11-08T12:00:00Z" })),
+      409,
+      "closed_day",
+    );
+    expectError(await postOrder(app, orderBody({ lines: [line("nope")] })), 400, "unknown_item");
+    expectError(await postOrder(app, orderBody({ customerName: "" })), 400, "validation");
+    expect(deps.payments.calls.createCheckout.map((call) => call.orderId)).toEqual([full.id]);
+  });
+
+  test("setCheckout fails after the session was created: 500 internal; the order stays held without a session", async () => {
+    // §10: such a hold stays held without a URL; the cron releases it (§8.4).
+    const memory = createMemoryRepository({ settings: seedConfig, menu: seedMenu });
+    const { app, deps } = makeApp({
+      repo: {
+        ...memory,
+        setCheckout: async () => {
+          throw new Error("db down");
+        },
+      },
+    });
+    const res = await postOrder(app, orderBody());
+    expectError(res, 500, "internal");
+    expect(res.text).not.toContain("db down");
+
+    expect(deps.payments.calls.createCheckout).toHaveLength(1);
+    const orders = await allOrders(deps);
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({
+      status: "held",
+      stripeSessionId: null,
+      checkoutUrl: null,
+      holdExpiresAt: new Date(HOLD_EXPIRES_AT),
+    });
+    expect(await usageAt(deps, S)).toEqual({ booked: 1, capacity: 20 });
   });
 });
 
@@ -291,7 +519,7 @@ describe("GET /orders/:id", () => {
     const { app, deps } = makeApp();
     const order = await placeOrder(app);
     deps.clock.set("2026-11-09T11:11:00Z");
-    expect(await runCron(deps)).toEqual({ released: 1 });
+    expect(await runCron(deps)).toEqual({ released: 1, sessionsExpired: 1 });
 
     const summary = expectJson(await getOrder(app, order.id), 200, OrderSummarySchema);
     expect(summary).toEqual({

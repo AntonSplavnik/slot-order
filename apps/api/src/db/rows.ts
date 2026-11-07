@@ -92,6 +92,7 @@ export type OrderRow = {
   promo_code: string | null;
   pickup_code: string;
   stripe_session_id: string | null;
+  checkout_url: string | null;
   stripe_payment_intent_id: string | null;
   hold_expires_at: string | null;
   cancel_reason: CancelReason | null;
@@ -189,6 +190,7 @@ export function orderFromRow(row: OrderRow): Order {
     promoCode: row.promo_code,
     pickupCode: row.pickup_code,
     stripeSessionId: row.stripe_session_id,
+    checkoutUrl: row.checkout_url,
     stripePaymentIntentId: row.stripe_payment_intent_id,
     holdExpiresAt: dateOrNull(row.hold_expires_at),
     cancelReason: row.cancel_reason,

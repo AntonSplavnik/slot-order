@@ -185,6 +185,7 @@ Only `kind = 'item'` rows have groups; combos have none (CHECK by trigger is ove
 | `promo_code` | text, null | |
 | `pickup_code` | text, unique | §3 Pickup code |
 | `stripe_session_id` | text, unique, null | |
+| `checkout_url` | text, null | the Checkout Session's URL (§9.1); added by `20261107120000_checkout_url.sql` (M5) |
 | `stripe_payment_intent_id` | text, null | from the completed session |
 | `hold_expires_at` | timestamptz, null | set while `held` |
 | `cancel_reason` | text, null | `stripe_failed`, `session_expired`, `refunded_slot_full` |
@@ -429,10 +430,10 @@ The cart before an order exists lives only in the browser (the handoff's `draft`
 |---|---|---|---|
 | — | `held` | `POST /orders` | price with `core`; `place_hold` (atomic); Stripe Checkout Session; store its id and URL. Stripe failure → `release_hold(cancelled, stripe_failed)` and `502 payment_unavailable`. |
 | `held` | `paid` | webhook `checkout.session.completed` with `payment_status = paid` | `paid_at`, payment intent id; the pickup code becomes visible |
-| `held` | `expired` | cron: `release_expired_holds()` | slot released; then `checkout.sessions.expire` per order, best-effort |
+| `held` | `expired` | cron: `release_expired_holds()` | slot released; then `checkout.sessions.expire` per order that has a session, best-effort (§8.4) |
 | `held` | `cancelled` | webhook `checkout.session.expired` while still held: a safety net for a cron that did not run (Stripe's own 30-minute expiry; normally the order is already `expired` and the event is a no-op) | slot released, reason `session_expired` |
 | `expired` | `paid` | webhook `checkout.session.completed` for an expired order (the race in §8.3) | `reserve_for_paid`: slot reserved again |
-| `expired` | `cancelled` | the same webhook when `reserve_for_paid` raises `slot_full` | `refunds.create` on the payment intent, reason `refunded_slot_full`; still 200 to Stripe |
+| `expired` | `cancelled` | the same webhook when `reserve_for_paid` raises `slot_full` | `cancelled_at`, reason `refunded_slot_full` (a conditional update; no slot change, `expired` released the items already), **then** `refunds.create` on the payment intent (§9.3); still 200 to Stripe |
 | `paid` | `ready` | staff board | `ready_at` |
 | `paid`, `ready` | `picked_up` | `POST /staff/pickup` with the code | `picked_up_at` |
 
@@ -456,8 +457,10 @@ answer 200).
 ### 8.4 Holds and Stripe's clock
 Our hold is 10 minutes; Stripe's shortest session expiry is 30 minutes (§17). The sequence every minute:
 1. `release_expired_holds()` moves expired holds to `expired` and frees their items (one SQL call).
-2. For each returned order, `stripe.checkout.sessions.expire(sessionId)`. A session that is already complete throws; the
-   error is logged and ignored, because its `checkout.session.completed` event is on its way.
+2. For each returned order that has a `stripe_session_id`, `payments.expireSession(sessionId)`. A session that is
+   already complete (or expired) throws; the error is logged and ignored, because its `checkout.session.completed`
+   event is on its way. `runCron` answers `{ released, sessionsExpired }` (the holds released, the sessions Stripe
+   accepted to expire).
 
 The gap between 1 and 2 is the race: a customer who pays in it has an `expired` order and a successful payment. The
 webhook handles it with `reserve_for_paid`; if the slot has filled up meanwhile, the payment is refunded and the order
@@ -467,26 +470,136 @@ explicit, tested with a fake Stripe.
 ## 9. Stripe (test mode only)
 
 ### 9.1 Checkout Session
-`mode: payment`, `currency: eur`, one `line_item` per priced line with `quantity: 1` and `unit_amount` = the line's
-discounted gross (so cents always match ours, also for combos and discounts), the line's name as
-"2 × Chicken Burger (large, garlic)", `client_reference_id` and `metadata.order_id` = the order id,
-`expires_at` = creation + 30 minutes (the minimum), `success_url` = `${WEB_ORIGIN}/orders/${id}?paid=1`,
-`cancel_url` = `${WEB_ORIGIN}/orders/${id}`. The customer's name is not sent to Stripe.
+`mode: payment`, one `line_item` per priced line (§7.5) with `quantity: 1` and `price_data: { currency: "eur",
+unit_amount: lineGrossCents − discountCents, product_data: { name } }`, so the cents always match ours, also for
+combos and discounts (the line items sum to `receipt.totalCents`). The name is the line's name with its option names
+in parentheses, prefixed with the quantity when it is more than one: "Burger Menu", "Chicken Burger (large, garlic)",
+"2 × Chicken Burger (large, garlic)", "3 × Cola 0.33 l". `client_reference_id` and `metadata.order_id` = the order id;
+`expires_at` = `now` + 31 minutes in epoch seconds, floored to the second: Stripe's minimum is 30 minutes, measured
+on its clock when the request arrives (§17), and the extra minute absorbs the round trip and clock skew (our hold is
+10 minutes, §8.4, so the session's own expiry is only a safety net); `success_url` = `${WEB_ORIGIN}/orders/${id}?paid=1`, `cancel_url` =
+`${WEB_ORIGIN}/orders/${id}`. The customer's name is not sent to Stripe. An answer without a `url` counts as a
+failure. Any failure (network, a refused request, a total under Stripe's minimum of 0.50 €) →
+`release_hold(cancelled, stripe_failed)` and `502 payment_unavailable` (§8.2).
 
 ### 9.2 Webhook `POST /webhooks/stripe`
-1. Read the raw body; verify with `stripe.webhooks.constructEventAsync(body, signature, STRIPE_WEBHOOK_SECRET,
-   undefined, Stripe.createSubtleCryptoProvider())` (Workers have no Node `crypto`). Bad signature → 400.
-2. `INSERT INTO stripe_events (id, type, order_id)`. Conflict → `200 { duplicate: true }`, nothing else.
-3. Handle `checkout.session.completed` and `checkout.session.expired` (§8.2); any other type → 200, recorded.
-4. A failure after step 2 deletes the event row and answers 500, so Stripe's retry is processed, not treated as a
-   duplicate. The transitions themselves are conditional updates, so even a retry that slips through cannot double-pay.
+1. Read the raw body (`c.req.text()`, no JSON parsing before verification) and the `Stripe-Signature` header; verify
+   with `stripe.webhooks.constructEventAsync(body, signature, STRIPE_WEBHOOK_SECRET, 300,
+   Stripe.createSubtleCryptoProvider(), now.getTime())`: the Web Crypto provider, because Workers have no synchronous
+   HMAC (§17), and `receivedAt` from the app's clock **in milliseconds** (the library divides it by 1000 itself; in
+   seconds the age would be hugely negative and the check would never fire), so the 5-minute tolerance is checked
+   against `now`, not the host's clock. A missing header, a bad or stale signature, a body that is not JSON → 400 `bad_signature`.
+2. Reduce the event to the `StripeEvent` subset (§9.4): `id`, `type`, and from `data.object` the session id, the
+   `payment_status`, the payment intent id (a string, or the `id` of an expanded object, else null) and `orderId` =
+   `metadata.order_id` when it is a UUID, else null (`stripe_events.order_id` is a uuid column; anything else is an
+   event for no order). An event that does not even have `id` and `type` → 400 `validation`.
+3. `INSERT INTO stripe_events (id, type, order_id)`. Conflict → `200 { duplicate: true }`, nothing else.
+4. Handle by type (the rules of §8.2; every step is a conditional update, so even a retry that slips through cannot
+   double-pay):
+   - `checkout.session.completed` with `payment_status = paid`: read the order. `held` → `transition(held → paid)`
+     with the payment intent. `expired` → `reserve_for_paid`; on `slot_full` → `transition(expired → cancelled,
+     refunded_slot_full)` **then** the refund (§9.3). `cancelled` with reason `refunded_slot_full` → the refund once
+     more (idempotent; this is the retry after a refund that failed). `paid`, `ready`, `picked_up`, any other
+     `cancelled`, no order id, an unknown order → nothing. A conditional update that matches no row (the status moved
+     between the read and the update, e.g. the cron expired the hold meanwhile) → read the order again and apply the
+     rule once more; a second miss → step 5. A `payment_status` other than `paid` → nothing (recorded). A paid
+     session without a payment intent (Stripe always sends one in `payment` mode; a guard) pays the order all the
+     same, with a null intent.
+   - `checkout.session.expired` → `release_hold(cancelled, session_expired)`; `NULL` (already moved on) is fine.
+   - any other type → nothing; recorded.
+   Then `200 { received: true }`.
+5. A failure in step 4 (a repository error, Stripe refusing the refund) deletes the event row and answers 500
+   `internal`, so Stripe's retry is processed, not treated as a duplicate. If the deletion fails too, the answer is
+   still 500, the error is logged and the event stays recorded, so Stripe's retry is answered as a duplicate (an
+   operator's case: the order is still in its old status and the event id is in the table).
 
-Secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` as Worker secrets (`wrangler secret put`), locally in the
-git-ignored `.dev.vars`. Local webhooks: `stripe listen --forward-to localhost:8787/webhooks/stripe`.
+Secrets: `STRIPE_SECRET_KEY` (`sk_test_…`; the environment schema refuses any other prefix: test mode only) and
+`STRIPE_WEBHOOK_SECRET` (`whsec_…`) as Worker secrets (`wrangler secret put`), locally in the git-ignored `.dev.vars`.
+Local webhooks: `stripe listen --forward-to localhost:8787/webhooks/stripe` (its own `whsec_`).
 
 ### 9.3 Refunds
-Only the one case in §8.2: `stripe.refunds.create({ payment_intent })` for a paid order whose slot could not be reserved
-again. No refund UI.
+Only the one case in §8.2: `stripe.refunds.create({ payment_intent }, { idempotencyKey: "refund:<order id>" })` for
+a paid order whose slot could not be reserved again. The order is marked `cancelled` first, the refund follows: if the
+refund fails, the webhook answers 500, Stripe retries, and the handler refunds a `cancelled`/`refunded_slot_full`
+order again; the idempotency key makes Stripe answer with the same refund instead of a second one. (The other
+order, refund first, could pay an order whose money is already back: a retry after a failed cancel would find the
+slot free and `reserve_for_paid` would succeed.) No refund UI.
+
+### 9.4 API (`apps/api/src/payments/`)
+`Payments` (`types.ts`) is the only way routes and the cron reach Stripe; `AppDeps.payments` (§10.3) is required.
+Two implementations: `createStripePayments(stripe, webhookSecret)` (`stripe.ts`) over the `stripe` package, and
+`createFakePayments(options?)` (`fake.ts`) for the route tests and the web app's own tests.
+
+```ts
+interface Payments {
+  /** §9.1: the Checkout Session for a held order. Throws PaymentsError when Stripe fails. */
+  createCheckout(order: Order, urls: CheckoutUrls, now: Date): Promise<CheckoutSession>;
+  /** §8.4 step 2. Throws PaymentsError when Stripe refuses (the session is complete or already expired). */
+  expireSession(sessionId: string): Promise<void>;
+  /** §9.3, idempotent per order. Throws PaymentsError. */
+  refund(paymentIntentId: string, orderId: string): Promise<void>;
+  /** §9.2 steps 1–2. Throws BadSignatureError; `signature` is the header, null when absent. */
+  verifyWebhook(rawBody: string, signature: string | null, now: Date): Promise<StripeEvent>;
+}
+type CheckoutUrls = { success: string; cancel: string };
+type CheckoutSession = { sessionId: string; url: string };
+type StripeEvent = {
+  id: string;
+  type: string;
+  sessionId: string | null;
+  paymentStatus: string | null;
+  paymentIntentId: string | null;
+  orderId: string | null;
+};
+```
+
+- `PaymentsError` (any Stripe failure, the cause attached) and `BadSignatureError` are classes in `types.ts`.
+  `toApiError` maps `BadSignatureError` → 400 `bad_signature`; a `PaymentsError` that reaches a route is 500
+  `internal` (the order route catches its own and answers 502, §8.2).
+- `stripeEventFromRaw(raw: unknown): StripeEvent` (`types.ts`) is the pure reduction of §9.2 step 2: a Zod schema
+  of the subset, every other field ignored; `id` and `type` are required.
+- `checkoutSessionParams(order, urls, now): Stripe.Checkout.SessionCreateParams` (`stripe.ts`) is the pure mapping
+  of §9.1, exported so the tests pin it without a network and the fake records exactly what Stripe would receive.
+- `createStripePayments(stripe: StripeClient, webhookSecret)`: `StripeClient` is the structural subset of a `Stripe`
+  instance the adapter uses (`checkout.sessions.create` and `.expire`, `refunds.create`,
+  `webhooks.constructEventAsync`), so a test can pass a recording stub and production passes
+  `new Stripe(STRIPE_SECRET_KEY)`. Every Stripe error becomes a `PaymentsError` with the original as `cause`.
+- `createFakePayments({ webhookSecret = "whsec_test" }?)` answers a `FakePayments` = `Payments` plus:
+  - `calls`: `{ createCheckout: { orderId, params }[], expireSession: string[], refund: { paymentIntentId, orderId }[]
+    }`, every call recorded in order, `params` from `checkoutSessionParams`;
+  - sessions `cs_test_1`, `cs_test_2`, … numbered by successful creations, each with the URL
+    `https://checkout.stripe.com/c/pay/<id>`;
+  - `fail(method, on = true)`: while on, `createCheckout`, `expireSession` or `refund` throws a `PaymentsError`
+    (the call is still recorded);
+  - `signedEvent(raw, now)`: `{ body, signature }` for a Stripe-shaped event (`raw` is what Stripe would send:
+    `{ id, type, data: { object: { … } } }`), signed with `stripe.webhooks.generateTestHeaderString({ payload,
+    secret, timestamp: now in seconds })`;
+  - `verifyWebhook` is the real verification (the same function as the Stripe adapter, on an offline `Stripe`
+    instance with the fake's secret), so the route tests cover signatures, the tolerance and the subset mapping.
+
+### 9.5 Decisions made while building M5
+- `reserve_for_paid` raising `invalid_status` is a miss of §9.2 step 4 (its conditional update matched no row: the
+  order is no longer `expired`), as is a `null` from `transition(expired → cancelled)`: the order is read again and
+  the rule applied once more; two attempts in all, then step 5.
+- A refund that is due for a session without a payment intent (impossible in `payment` mode; a guard): the order is
+  still `cancelled` with `refunded_slot_full`, the refund is skipped with an error in the log naming the order (an
+  operator's case), the answer is 200. On the retry path (`cancelled`/`refunded_slot_full`) the refund uses the
+  event's payment intent, because the order's own column stays null after a rolled-back `reserve_for_paid`.
+- One `now` per webhook request, read before the body: the signature's tolerance and every timestamp use it.
+- An event without a usable `orderId` is recorded and nothing else, whatever its type; `checkout.session.expired`
+  for an unknown id goes through `release_hold`, which answers `NULL`. Nothing looks an order up by session id.
+- Only a `PaymentsError` from `createCheckout` releases the hold with `stripe_failed`; any other throw (and a
+  failing `setCheckout`) is a 500 that leaves the hold to the cron. If `releaseHold` fails too, 500.
+- A session answered with `url: ""` counts as one without a URL (a `PaymentsError`).
+- `Stripe.createSubtleCryptoProvider()` is created per verification, so nothing touches `crypto.subtle` at the
+  Worker's start.
+- The webhook does not call `canTransition`: it switches on the status it has just read, and the only transitions
+  it takes (`held → paid`, `expired → cancelled`) are in the table of §8.2.
+- Logs carry messages only: the cron names the Stripe call that failed ("Stripe checkout.sessions.expire failed"),
+  not Stripe's reason; a `PaymentsError` reaching `onError` (a failed refund) is logged with its `cause` (a Stripe
+  error object: response metadata, never the key); no body, header, key or secret is logged or returned.
+- The fake is not part of the Worker bundle (`wrangler deploy --dry-run` checked); the bundle carries the Web build
+  (`WebPlatformFunctions`, `FetchHttpClient`, `SubtleCryptoProvider`).
 
 ## 10. API (`apps/api`)
 
@@ -500,9 +613,9 @@ are `{ error: { code, message, lineIndex?, issues? } }` (§12). CORS allows `WEB
 | `GET /menu` | — | `PublicMenu`: the `Menu` without its promo codes (customers never see the code list; the browser prices with `promoCodes: []` and asks `POST /quotes` for a code). |
 | `GET /slots?date=YYYY-MM-DD&items=1` | `SlotsQuery` | `SlotsResponse { date, status, slots }` (§6.2 `listSlots` for `items`). Before listing, the API calls `releaseExpiredHolds(now)` so availability is fresh between cron runs. |
 | `POST /quotes` | `Cart` | `Receipt` (pure, nothing stored) |
-| `POST /orders` | `CreateOrderRequest` = `Cart & { slotStart, customerName }` | `201 CreateOrderResponse { order: OrderSummary, checkoutUrl }`; `checkoutUrl` is `null` until M5 |
+| `POST /orders` | `CreateOrderRequest` = `Cart & { slotStart, customerName }` | `201 CreateOrderResponse { order: OrderSummary, checkoutUrl }`; `checkoutUrl` is the Checkout Session's URL (§9.1), repeated inside `order` while held |
 | `GET /orders/:id` | — | `OrderSummary` |
-| `POST /webhooks/stripe` | Stripe (M5) | `{ received: true }` or `{ duplicate: true }` |
+| `POST /webhooks/stripe` | the raw JSON body and the `Stripe-Signature` header (§9.2) | `WebhookResponse`: `{ received: true }` or `{ duplicate: true }`; 400 `bad_signature`; 500 after a failed handling (the event row removed) |
 | `GET /staff/orders?date=` | token; `date` defaults to today | `StaffBoard { date, status, slots: StaffSlot[] }`: every grid slot of the day with `booked`/`capacity` (0 and the configured capacity for a slot without a row) and its orders in `paid`, `ready`, `picked_up` (held orders count in `booked` only) |
 | `POST /staff/orders/:id/ready` | token | `StaffOrder` (`paid → ready`) |
 | `POST /staff/pickup` | token, `PickupRequest { code }` | `StaffOrder` (`paid` or `ready` → `picked_up`); the code is normalised first (§8.3) |
@@ -510,11 +623,13 @@ are `{ error: { code, message, lineIndex?, issues? } }` (§12). CORS allows `WEB
 `POST /orders`, in order: validate the body; `getMenu`, `priceCart` (`CartError` → 400 with its code and `lineIndex`);
 `getSettings`; `getSlotUsage` for the slot; `checkSlot(config, slotStart, itemCount, now, booked)` (§6.2, a `SlotError`
 → 409); a pickup code from 8 random bytes; `placeHold(order, capacityPerSlot, holdExpiry(config, now))`
-(`SlotFullError` → 409 `slot_full`); then (M5) the Checkout Session. The body's own totals, if any, are ignored: the
-server prices.
+(`SlotFullError` → 409 `slot_full`); then `payments.createCheckout(order, urls, now)` (§9.1) and `setCheckout(id,
+sessionId, url)`; a `PaymentsError` → `releaseHold(id, cancelled, stripe_failed, now)` and 502 `payment_unavailable`
+(a hold whose session was created but whose `setCheckout` failed stays held without a URL; the cron releases it,
+§8.4). The body's own totals, if any, are ignored: the server prices.
 
 The Worker also exports `scheduled()` for the Cron Trigger (`* * * * *`): `runCron(deps)` releases the expired holds
-(§8.4 step 1; step 2, the Stripe sessions, arrives in M5) and returns `{ released }`.
+and expires their Checkout Sessions (§8.4) and returns `{ released, sessionsExpired }`.
 
 ### 10.1 Schemas (`packages/core/src/schemas/api.ts`)
 - Instants in JSON are ISO 8601 strings with an offset (`z.iso.datetime({ offset: true })`), always UTC (`…Z`) in
@@ -524,8 +639,10 @@ The Worker also exports `scheduled()` for the Cron Trigger (`* * * * *`): `runCr
 - `CreateOrderRequest = Cart & { slotStart, customerName (trimmed, 1–60) }`. `CreateOrderResponse = { order, checkoutUrl: string | null }`.
 - `OrderSummary = { id, status, slotStart, slotLabel, customerName, itemCount, receipt, createdAt, pickupCode?,
   checkoutUrl?, holdExpiresAt?, cancelReason?, paidAt?, readyAt?, pickedUpAt?, expiredAt?, cancelledAt? }`:
-  `pickupCode` only in `paid`, `ready`, `picked_up`; `checkoutUrl` (nullable) and `holdExpiresAt` only in `held`;
-  `cancelReason` only in `cancelled`; each timestamp only once it exists.
+  `pickupCode` only in `paid`, `ready`, `picked_up`; `checkoutUrl` (the session's URL, `null` until `setCheckout`
+  stored one) and `holdExpiresAt` only in `held`; `cancelReason` only in `cancelled`; each timestamp only once it
+  exists.
+- `WebhookResponse = { received: true } | { duplicate: true }` (§9.2).
 - `StaffOrder = { id, status, pickupCode, customerName, slotStart, slotLabel, lines, itemCount, totalCents, paidAt,
   readyAt?, pickedUpAt? }`. `StaffSlot = { start, label, booked, capacity, orders }`. `StaffBoard = { date, status, slots }`.
   `StaffQuery = { date? }`. `PickupRequest = { code (1–20 chars) }`.
@@ -540,8 +657,8 @@ tests). **One contract test runs against both** (`test/repo/contract.ts`: in `pn
 `pnpm test:db` against the Supabase one), so the fake cannot drift from the database.
 
 `Order` is the domain shape (camelCase, `Date`s, `null` for absent): `{ id, status, slotStart, customerName, lines,
-receipt, itemCount, totalCents, promoCode, pickupCode, stripeSessionId, stripePaymentIntentId, holdExpiresAt,
-cancelReason, createdAt, paidAt, readyAt, pickedUpAt, expiredAt, cancelledAt }`. `NewOrder` is what `placeHold` takes
+receipt, itemCount, totalCents, promoCode, pickupCode, stripeSessionId, checkoutUrl, stripePaymentIntentId,
+holdExpiresAt, cancelReason, createdAt, paidAt, readyAt, pickedUpAt, expiredAt, cancelledAt }`. `NewOrder` is what `placeHold` takes
 (`slotStart, customerName, lines, receipt, itemCount, totalCents, promoCode, pickupCode`).
 
 | Method | Semantics (the SQL of §5 behind it) |
@@ -553,30 +670,33 @@ cancelReason, createdAt, paidAt, readyAt, pickedUpAt, expiredAt, cancelledAt }`.
 | `getOrder(id): Order \| null` | by id. `createdAt` is the database's own time (`now()` in `place_hold`), the one timestamp not taken from the app's clock |
 | `findOrderByPickupCode(code): Order \| null` | by the canonical code |
 | `listOrders(from, to): Order[]` | `from ≤ slot_start < to`, any status, by `slot_start` then `created_at` |
-| `transition(id, from, to, at, patch?): Order \| null` | the conditional `UPDATE … WHERE status IN from` setting `status = to` and the matching `*_at = at` (`paid_at`, `ready_at`, `picked_up_at`), plus `patch.stripePaymentIntentId` when given; `null` when no row matched (unknown id or another status). Only for `held → paid`, `paid → ready`, `paid \| ready → picked_up` (§8.2); the caller checks `canTransition` first. |
+| `transition(id, from, to, at, patch?): Order \| null` | the conditional `UPDATE … WHERE status IN from` setting `status = to` and the matching `*_at = at` (`paid_at`, `ready_at`, `picked_up_at`, `cancelled_at`), plus `patch.stripePaymentIntentId` and `patch.cancelReason` when given; `null` when no row matched (unknown id or another status). Only for `held → paid`, `paid → ready`, `paid \| ready → picked_up`, and `expired → cancelled` with `cancelReason` (§8.2: the refund case; no slot change); the caller checks `canTransition` first. |
 | `releaseHold(id, status, reason, now): Order \| null` | `release_hold`; `null` when nothing was released (an all-null row from PostgREST is `null`) |
 | `releaseExpiredHolds(now): Order[]` | `release_expired_holds` |
-| `reserveForPaid(id, capacity, paymentIntentId, now): Order` | `reserve_for_paid`; throws `SlotFullError` or `InvalidStatusError` |
-| `setCheckout(id, sessionId, checkoutUrl): void` (M5) | the Stripe session on a held order |
-| `recordStripeEvent(id, type, orderId): boolean` (M5) | `INSERT`; `false` on a duplicate id |
-| `deleteStripeEvent(id): void` (M5) | after a failed handling (§9.2 step 4) |
+| `reserveForPaid(id, capacity, paymentIntentId, now): Order` | `reserve_for_paid`; `paymentIntentId` may be `null` (a completed session without one, §9.2); throws `SlotFullError` or `InvalidStatusError` |
+| `setCheckout(id, sessionId, checkoutUrl): void` | `stripe_session_id` and `checkout_url` on the order (any status: the session exists once Stripe answered) |
+| `recordStripeEvent(id, type, orderId): boolean` | `INSERT`; `false` on a duplicate id |
+| `deleteStripeEvent(id): void` | after a failed handling (§9.2 step 5) |
 
 `SlotFullError` and `InvalidStatusError` are classes in `types.ts`; the Supabase implementation maps PostgREST's
 `P0001` with message `slot_full` / `invalid_status` to them and rethrows anything else.
 
 ### 10.3 The app and its dependencies (`apps/api/src/app.ts`)
 `createApp(deps: AppDeps): Hono` with `AppDeps = { repo: Repository; now: () => Date; staffToken: string; webOrigin:
-string; randomBytes: (n: number) => Uint8Array; payments?: Payments (M5) }`. `src/index.ts` builds them from the Worker
+string; randomBytes: (n: number) => Uint8Array; payments: Payments }`. `src/index.ts` builds them from the Worker
 environment (validated by Zod in `src/env.ts`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
-`WEB_ORIGIN`; the Stripe keys from M5) with `new Date()` and `crypto.getRandomValues`. Tests build them with the
-memory repository, a fixed `now` and deterministic bytes. `runCron(deps)` is the cron's body.
+`WEB_ORIGIN`, `STRIPE_SECRET_KEY` starting with `sk_test_`, `STRIPE_WEBHOOK_SECRET` starting with `whsec_`) with
+`new Date()`, `crypto.getRandomValues` and `createStripePayments(new Stripe(STRIPE_SECRET_KEY),
+STRIPE_WEBHOOK_SECRET)`. Tests build them with the memory repository, the fake payments, a fixed `now` and
+deterministic bytes. `runCron(deps)` is the cron's body.
 
 ### 10.4 Decisions made while building M4
 - A `date` that matches `YYYY-MM-DD` but is not a calendar day (`2026-02-30`) → 400 `validation` on `/slots` and
   `/staff/orders` (core would throw a `RangeError` otherwise).
 - `GET /slots` releases expired holds only for an `open` day (the other statuses list nothing); the staff board does
   not release holds, the cron does.
-- Until M5 adds the column, `setCheckout` stores only the session id, and a held order's `checkoutUrl` is `null`.
+- In M4 `setCheckout` stored only the session id and a held order's `checkoutUrl` was `null`; M5 added the column
+  (`orders.checkout_url`) and the URL in the summary.
 - An `InvalidStatusError` that reaches a route is 500 `internal` (§12 has no code for it); the M5 webhook handles it
   itself.
 - Invalid Worker environment variables → 500 `internal`; the log names the variables, never their values.
@@ -624,7 +744,7 @@ No design system beyond Tailwind defaults and one accent colour. No dark mode wo
 | Layer | What | How |
 |---|---|---|
 | Unit, `core` | **Slots:** the grid for each weekday of the seed, a day with two ranges, "24:00", the 44/92/100 DST counts and labels, the non-existent and ambiguous opening times, earliest start (exact grid point, mid-slot, across the DST gap), cut-off with a config where it matters (prep 0, cut-off 10), horizon edges in Berlin time with the process in UTC, `dayStatus` for every value, `listSlots` reasons, `checkSlot` error order, `holdExpiry`. **Pricing:** every `CartError`, deltas (0, positive, negative), min/max groups, the worked example of §7.4, VAT rounding on a table of hand-computed cases (e.g. 1 cent, 100, 1000, 1999 at 7 and 19), percent and fixed promos, the largest-remainder spread (a 10 % discount over 1500/500, 5 % over 333/333/334), a fixed promo larger than the subtotal, the VAT summary summing to the total for random carts (a property test with a seeded generator), combo parts (one per rate, sums equal the discounted line gross), `priceCart` deterministic, `itemCount`, `splitVat` and `allocate` directly. **Orders:** `canTransition` over the whole table, pickup codes (8 Crockford chars, no ambiguous letters, 10 000 draws unique). **Schemas:** every API shape round-trips its example. | Vitest in `packages/core`; `now` fixed per test; no network |
-| API | Every route with `app.request()` against the in-memory repository and a fake `Payments`: happy paths, each error code, `GET /slots` releasing expired holds first, `POST /orders` pricing server-side (a tampered total is ignored), `pickupCode` hidden while held, staff token (missing, wrong, right), ready/pickup transitions, the webhook: a real signature built with `stripe.webhooks.generateTestHeaderString` and a test secret, a bad signature, `completed` → paid, the same event twice → one paid order and one event row, `expired` → cancelled only when held, an unknown order → 200, a processing failure removing the event row, the `expired`-then-paid race (re-reserve ok; slot full → refund + cancelled), and the cron handler (release, then expire sessions, a completed session's error ignored). | Vitest in `apps/api`, `app.request()`, fakes; no network |
+| API | Every route with `app.request()` against the in-memory repository and a fake `Payments`: happy paths, each error code, `GET /slots` releasing expired holds first, `POST /orders` pricing server-side (a tampered total is ignored), `pickupCode` hidden while held, staff token (missing, wrong, right), ready/pickup transitions, the webhook: a real signature built with `stripe.webhooks.generateTestHeaderString` and a test secret, a bad signature, `completed` → paid, the same event twice → one paid order and one event row, `expired` → cancelled only when held, an unknown order → 200, a processing failure removing the event row, the `expired`-then-paid race (re-reserve ok; slot full → cancelled + refund), and the cron handler (release, then expire sessions, a completed session's error ignored). **Payments:** the Stripe adapter over a recording stub (`checkoutSessionParams` against §9.1, an answer without a URL, `expireSession`, `refund` with its idempotency key, `verifyWebhook` with real signatures) and the fake (recording, `fail`, `signedEvent` round trip). | Vitest in `apps/api`, `app.request()`, fakes; no network |
 | Database | `pnpm test:db` against local Supabase: migrations and seed apply from scratch (`supabase db reset` in `globalSetup`); the seed maps to the `core` fixtures `seedMenu` and `seedConfig` exactly; `reserve_slot` with capacity 1: **50 parallel calls → exactly 1 success, 49 `slot_full`**, `booked = 1`, both through the `postgres` driver (50 connections) and through `supabase-js` as production calls it; capacity 20 with 50 callers → 20 winners; an existing row keeps its capacity; `invalid_items`; `place_hold` returns the held order and rolls the reservation back when the insert fails; `release_hold` once and again (`NULL`, no double release), `invalid_status`; `release_expired_holds(p_now)` releases only the expired holds; `reserve_for_paid` ok and `slot_full`, only from `expired`; `slot_booked_mismatches()` empty after every scenario; the CHECKs on `orders.status` and `slots.booked`, the `stripe_events` primary key; RLS: with the anon key every table reads as empty and every function is refused. | Vitest in `apps/api` (`test/db/*.test.ts`, `vitest.db.config.ts`), `postgres` for the parallel calls and assertions, `supabase-js` for the PostgREST path; files run one at a time; CI runs it with the Supabase CLI (§14) |
 | Manual | The phone flow with the test card `4242 4242 4242 4242`, the QR scan from a second phone, the staff board | Before each milestone's review, and against production after each deploy |
 
@@ -652,10 +772,10 @@ Markdown-only changes skip CI (`paths-ignore`).
 
 ### Where it runs
 - **API:** Worker `slot-order-api` at `https://slot-order-api.antonsplavnik.workers.dev` (live since 2026-11-07), Cron
-  Trigger every minute, `nodejs_compat` only if the Stripe SDK
-  needs it (verified in M5; the spec records the answer). M0 note: with `compatibility_date = 2026-11-06`, wrangler
-  4.158 reports Node.js compatibility as already enabled without the flag; `@types/node` is added to `apps/api` when a
-  `node:` import first appears.
+  Trigger every minute, no `nodejs_compat`: `stripe` 23 ships a Web build that wrangler selects through the
+  `workerd` export condition, with the fetch client and Web Crypto as its defaults (verified in M5, §17). M0 note:
+  with `compatibility_date = 2026-11-06`, wrangler 4.158 reports Node.js compatibility as already enabled without the
+  flag; `@types/node` is in `apps/api` (the `stripe` package's peer dependency).
 - **Web:** Worker `slot-order-web` via OpenNext, `*.workers.dev`.
 - **Database:** the Supabase free-tier project `slot-order` (ref `ckvngajrwdijdtjvfblm`) in `eu-central-1` (Frankfurt),
   created 2026-11-07. The service-role key exists only as a Worker secret and in the Mac's git-ignored `.env`
@@ -703,8 +823,11 @@ git-ignored; nothing in the committed repo names the company this was written fo
   [IHK Darmstadt](https://www.ihk.de/darmstadt/produktmarken/beraten-und-informieren/branchen/tourismus-in-suedhessen/informationen-fuer-gastronomie-und-hotellerie/reduzierter-mehrwertsteuersatz-6933470),
   [für-gründer.de](https://www.fuer-gruender.de/blog/gastro-mehrwertsteuer-2026-das-gilt-ab-1-januar/).
 - **Stripe Checkout expiry.** `expires_at` must be between 30 minutes and 24 hours after creation; a session can be
-  ended early with the expire endpoint, which fires `checkout.session.expired`. Source:
-  [Stripe, Manage limited inventory](https://docs.stripe.com/payments/checkout/managing-limited-inventory).
+  ended early with the expire endpoint, which fires `checkout.session.expired`; only an open session can be expired
+  (an error otherwise). Stripe measures the minimum on its own clock when the request arrives, so exactly 30 minutes
+  from the caller's clock is refused now and then; §9.1 sends 31 minutes. Sources:
+  [Stripe, Manage limited inventory](https://docs.stripe.com/payments/checkout/managing-limited-inventory),
+  [Stripe, expire a session](https://docs.stripe.com/api/checkout/sessions/expire?lang=node).
 - **Next.js on Cloudflare.** `@opennextjs/cloudflare` 1.20.x supports Next.js 16 (peer `16.3.x`) and 15.5; build with
   `opennextjs-cloudflare build`, deploy with `wrangler`; needs `nodejs_compat`. Sources:
   [release 1.20.3](https://github.com/opennextjs/opennextjs-cloudflare/releases/tag/@opennextjs%2Fcloudflare@1.20.3),
@@ -712,5 +835,26 @@ git-ignored; nothing in the committed repo names the company this was written fo
 - **Supabase CLI in CI.** The CLI reference lists `supabase db start` beside `supabase start` as a way to start the local
   stack, and `supabase start -x <containers>` excludes services. Which one CI uses is settled in M0. Source:
   [Supabase CLI reference](https://supabase.com/docs/reference/cli/supabase-start).
-- **To verify in M5** (not researched yet): whether the current `stripe` package picks the fetch client on Workers by
-  default or needs `Stripe.createFetchHttpClient()`; whether `nodejs_compat` is needed at all.
+- **`stripe` on Workers** (verified 2026-11-07 against `stripe` 23.1.0, released 2026-10-29, in `node_modules`). The
+  package's `exports` map has `workerd`, `worker`, `browser`, `bun` and `deno` conditions pointing at
+  `esm/stripe.esm.worker.js`, which initialises the client with `WebPlatformFunctions`: `createDefaultHttpClient()` is
+  the fetch client and `createDefaultCryptoProvider()` the SubtleCrypto one, so `new Stripe(key)` needs neither
+  `Stripe.createFetchHttpClient()` nor an `httpClient` option, and `constructEventAsync` verifies with Web Crypto by
+  default; the Node-only files (`NodeHttpClient`, `NodeCryptoProvider`, `NodePlatformFunctions`) are reached only
+  from the Node entry. Wrangler bundles with the conditions `workerd, worker, browser`, so the Worker gets that build
+  and `nodejs_compat` is not needed. The synchronous `constructEvent` cannot work with SubtleCrypto (async only), hence
+  `constructEventAsync(payload, header, secret, tolerance?, cryptoProvider?, receivedAt?)`; the code passes
+  `Stripe.createSubtleCryptoProvider()` and `receivedAt` explicitly so Vitest (Node build, Node 24's
+  `globalThis.crypto.subtle`) runs the same path as production. `receivedAt` is in **milliseconds**:
+  `validateComputedSignature` computes `Math.floor(receivedAt / 1000) - t` (`esm/Webhooks.js`), found by the M5 test
+  agent after the draft spec said seconds. `generateTestHeaderString({ payload, secret,
+  timestamp?, scheme?, signature?, cryptoProvider? })` returns `t=…,v1=…`; the default tolerance is 300 s.
+  `checkout.sessions.create(params)` answers a `Session` with `id`, `url`, `payment_intent` (`string | PaymentIntent |
+  null`), `payment_status` (`paid | unpaid | no_payment_required`), `metadata`, `client_reference_id`;
+  `checkout.sessions.expire(id)`; `refunds.create({ payment_intent }, { idempotencyKey })`. `StripeConfig.apiVersion`
+  is optional (the account's default version). The Checkout events `checkout.session.completed` and
+  `checkout.session.expired` carry a `Checkout.Session` in `data.object`. Sources: the package's `package.json`,
+  `esm/stripe.esm.worker.js`, `esm/platform/*.js`, `esm/Webhooks.d.ts`, `esm/resources/Checkout/Sessions.d.ts`,
+  `esm/resources/Refunds.d.ts`, `esm/resources/Events.d.ts`; [Cloudflare, Stripe support in
+  Workers](https://blog.cloudflare.com/announcing-stripe-support-in-workers) (2021: why the fetch client exists);
+  [Hono, Stripe webhook example](https://hono.dev/examples/stripe-webhook).
