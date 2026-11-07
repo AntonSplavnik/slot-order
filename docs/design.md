@@ -903,7 +903,7 @@ no `postgres:17` service container is needed.
    (`supabase db reset`) and reviewed before it is pushed.
 2. `wrangler deploy` in `apps/api` with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (secrets live in Cloudflare, set
    once by hand with `wrangler secret put`).
-3. `pnpm --filter @slot-order/web deploy` (`opennextjs-cloudflare build && opennextjs-cloudflare deploy`) with
+3. `pnpm --filter @slot-order/web run deploy` (`opennextjs-cloudflare build && opennextjs-cloudflare deploy`) with
    `NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev` baked into the build and the same Cloudflare
    secrets: the Worker `slot-order-web` (from M6).
 
