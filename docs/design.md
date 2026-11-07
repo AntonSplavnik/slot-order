@@ -708,18 +708,111 @@ deliberate simplification (§2, §16).
 
 ## 11. Web (`apps/web`)
 
-Next.js App Router, Tailwind, mobile-first, English. Client components where state lives; no server actions (the API is
-the only backend, as in the restaurant's own setup where the app and the portal share one API).
+Next.js 16 App Router, React 19, Tailwind 4, mobile-first, English. Client components where state lives; no server
+actions and no route handlers (the API is the only backend, as in the restaurant's own setup where the app and the
+portal share one API). The app reaches the API through one client (`src/lib/api.ts`) that validates every answer
+with core's schemas, and prices the cart locally with core's `priceCart` while a promo code goes through
+`POST /quotes`. Everything with logic lives in `src/lib/` as pure functions with tests (§11.2, §11.4); the screens
+(§11.1) only render and call them.
 
+### 11.1 Screens
 | Route | Screen |
 |---|---|
-| `/` | **Menu.** Items by section (Chicken, Sides, Drinks, Menus); tapping an item with options opens a sheet with its groups (radio for `max 1`, checkboxes otherwise, the min/max enforced before Add). Cart bar with the total, priced locally with `core`. The cart lives in `localStorage`. |
-| `/checkout` | **Slot and pay.** Name; a day strip (today + 6, closed days greyed with "Closed"); the day's slots from `GET /slots` as chips (non-bookable ones disabled with their reason on tap); promo code field (applied via `POST /quotes`); the receipt with VAT lines; **Pay** → `POST /orders` → redirect to `checkoutUrl`. Slot errors from the API are shown inline and the slot list refreshes. |
-| `/orders/[id]` | **Status.** Polls `GET /orders/:id` every 3 s while `held`. `paid`: the QR code (SVG of the staff pickup URL), the pickup code in letters, slot time, the receipt. `ready`: a "Ready, come and get it" banner. `picked_up`: "Enjoy your meal". `expired`: "Your slot hold ran out; start again". `cancelled`: the reason in words. |
-| `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`). Today's slots as sections with `booked/capacity`; each order a card: code, name, items with options, status, buttons **Ready** and **Picked up**. Refreshes every 10 s. A date picker for other days. |
-| `/staff/pickup?code=` | **Check-in.** The QR code's target. With the token: calls `POST /staff/pickup` and shows the order and "Picked up ✓", or the error. Without: asks for the token first. |
+| `/` | **Menu.** Three sections derived from the data (the menu has no section column): **Food** (`kind: item`, `vatCategory: food`), **Drinks** (`kind: item`, `vatCategory: drink`), **Menus** (`kind: combo`), items in `sort` order, inactive items hidden. Tapping an item with option groups opens a sheet with its groups (radio for `maxChoices: 1`, checkboxes otherwise; **Add** enabled only when every group has between its min and max choices); an item without groups is added at once. Lines with the same item and the same options merge. A cart bar with the item count and the total (local pricing). The cart lives in `localStorage` (§11.2 `cart.ts`). |
+| `/checkout` | **Slot and pay.** The cart's lines (quantity steppers, remove), the name (1–60 characters), a day strip (today and the next 6 days in Berlin; each day's status from `GET /slots?date=`, with `closed`, `past` and `too_far` days greyed and labelled), the chosen day's slots as chips (bookable ones tappable, the others disabled with their reason as a hint), the promo code field applied through `POST /quotes` (the receipt comes from the API while a code is set, from local pricing otherwise), the receipt with its VAT lines, **Pay** → `POST /orders` → the browser goes to `checkoutUrl`. An API error is shown inline by its code's text (§11.2 `errors.ts`); after a slot error (409) the slots are reloaded. An empty cart sends the customer back to `/`. |
+| `/orders/[id]` | **Status.** Polls `GET /orders/:id` every 3 s while `held` ("Confirming your payment…" when the URL carries `?paid=1`, else "Waiting for your payment" with a link to `checkoutUrl`). `paid`: the QR code (an inline SVG of the staff pickup URL), the pickup code in letters, the slot time, the receipt. `ready`: "Ready, come and get it". `picked_up`: "Enjoy your meal". `expired`: "Your slot hold ran out; start again". `cancelled`: the reason in words (§11.2 `status.ts`). |
+| `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`; a 401 clears it and asks again). The day's slots from `GET /staff/orders?date=` as sections with `booked/capacity`; each order a card: code, name, lines with options, status, buttons **Ready** (paid) and **Picked up** (paid or ready). Refreshes every 10 s. A date input for other days. |
+| `/staff/pickup?code=` | **Check-in.** The QR code's target. With a token: calls `POST /staff/pickup` and shows the order and "Picked up ✓", or the error's text (`invalid_code`, `invalid_transition`). Without: asks for the token first. |
 
-No design system beyond Tailwind defaults and one accent colour. No dark mode work.
+No design system beyond Tailwind defaults and one accent colour. No dark mode work. No images.
+
+### 11.2 Library (`apps/web/src/lib/`): pure functions, tested without a DOM
+- `config.ts`: `apiBaseUrl()` = `NEXT_PUBLIC_API_URL` without a trailing slash, default `http://localhost:8787`.
+- `api.ts`: `createApi(baseUrl, fetchFn = fetch): Api` with `menu(): PublicMenu`, `slots(date, items?): SlotsResponse`,
+  `quote(cart): Receipt`, `createOrder(request): CreateOrderResponse`, `order(id): OrderSummary`,
+  `staffBoard(token, date?): StaffBoard`, `staffReady(token, id): StaffOrder`, `staffPickup(token, code): StaffOrder`.
+  JSON in and out; every answer parsed with the core schema. A non-2xx answer whose body parses as `ApiError` throws
+  `ApiClientError { status, code, message, lineIndex? }`; any other non-2xx body → code `internal`; a 2xx body that
+  fails its schema, or is not JSON, → code `invalid_response`; `fetchFn` throwing → code `network`, status 0, the
+  cause's message. A non-2xx error body whose code is outside §12 → `internal` with its status.
+  `ApiClientError.code: ApiErrorCode | "network" | "invalid_response"`. The staff token travels as
+  `Authorization: Bearer <token>`.
+- `cart.ts`: the stored shape is core's `Cart`. `emptyCart()`; `addLine(cart, itemId, optionIds)` merges into the
+  line with the same `itemId` and the same option set (order ignored), `quantity + 1` capped at 20 (core's `CartLine`
+  maximum), else appends a line with `quantity 1`; `setQuantity(cart, index, quantity)`: a non-integer is floored,
+  below 1 removes the line, above 20 clamps, a bad index answers an equal cart; `removeLine(cart, index)` (a bad
+  index likewise); `setPromoCode(cart, code)`:
+  trimmed and upper-cased, empty → no `promoCode`; `itemCount(cart)` (the sum of quantities, 0 when empty);
+  `priceLocally(menu: PublicMenu, cart): Receipt` = core's `priceCart` on the menu with `promoCodes: []` and the
+  cart without its promo code (a `CartError` propagates; the screen drops the offending line). Persistence with an
+  injected `StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">`: `CART_KEY = "slot-order.cart"`,
+  `loadCart(storage)` (parsed with `CartSchema`; anything else, a throwing storage included, → `emptyCart()`),
+  `saveCart(storage, cart)` (an empty cart is no `Cart` for the schema, which wants a line: saving one removes the
+  key), `clearCart(storage)`; saving or clearing into a throwing storage does not throw (the cart lives on in
+  memory). Every function answers a new or equal object; none mutates its input.
+- `menu.ts`: `menuSections(menu: PublicMenu): { id: "food" | "drinks" | "menus"; title: string; items: MenuItem[] }[]`
+  as §11.1 (titles "Food", "Drinks", "Menus"; sections without items omitted; inactive items hidden);
+  `itemById(menu, id): MenuItem | undefined` (a lookup: it finds inactive items too).
+- `options.ts`: `toggleOption(group: OptionGroup, selected: string[], optionId): string[]` over the whole selection
+  of the item (ids of other groups untouched): in a `maxChoices: 1` group the tapped option replaces the group's
+  choice (the old id leaves, the new one is appended) and tapping the chosen one keeps it (radio semantics, also
+  for a group with `minChoices: 0`: such a choice cannot be cleared once made; no seed group is like that);
+  otherwise it toggles, and a choice beyond `maxChoices` is refused (the selection comes back unchanged); an id
+  outside the group is refused;
+  `selectionValid(item: MenuItem, optionIds): boolean` (every group between `minChoices` and `maxChoices`, no unknown
+  id, no id twice); `optionNames(item, optionIds): string[]` in the menu's order; `unitPrice(item, optionIds): number` (the price
+  plus the deltas, in cents).
+- `slots.ts`: `dayStrip(today: DayString, days = 7): DayString[]` (today and the next `days − 1` calendar days);
+  `chip(slot: SlotAvailabilityDto): { label; disabled; hint: string | null }` with the hint per reason: `past` →
+  "Already started", `cutoff` → "Too late to order", `too_soon` → "Too soon", `full` → "Full" (not bookable without
+  a reason: disabled, no hint); `dayLabel(day, today)`: "Today", "Tomorrow", else like "Wed 11 Nov" (never the
+  year), built from the day string, independent of the process time zone; `dayStatusText(status: DayStatus)`: `closed` → "Closed", `past` →
+  "Past", `too_far` → "Not yet", `open` → "".
+- `status.ts`: `statusView(order: OrderSummary): { title; body; tone: "waiting" | "good" | "done" | "bad" }`:
+  `held` → "Waiting for your payment" / "Your slot is held for a few minutes while you pay." (`waiting`); `paid` →
+  "Paid" / "Pick up at <slotLabel>. Show this code at the counter." (`good`); `ready` → "Ready, come and get it" /
+  "Pick up at <slotLabel>." (`good`); `picked_up` → "Enjoy your meal" / "" (`done`); `expired` → "Your slot hold ran
+  out" / "Start again from the menu." (`bad`); `cancelled` → "Order cancelled" (`bad`) with the body by reason:
+  `stripe_failed` → "Payment could not be started; nothing was charged.", `session_expired` → "The payment page
+  expired; nothing was charged.", `refunded_slot_full` → "Payment refunded: the slot filled up while you were
+  paying.", no reason → "Nothing was charged."; `shouldPoll(status)` → `held` only.
+- `errors.ts`: `errorText(code: ApiClientError["code"]): string`, a short text per §12 code and the two client
+  codes (a complete map; each starts with a capital and ends with a full stop): among them `slot_full` → "That slot
+  is full.", `promo_invalid` → "The promo code is not valid.", `unauthorized` → "The staff token is not valid.",
+  `network` → "The connection failed. Check your network and try again.", `invalid_response` → "The server answered
+  something unexpected.".
+- `qr.ts`: `pickupUrl(origin, code)` = `${origin}/staff/pickup?code=${code}`; `qrSvg(text): Promise<string>`
+  (`qrcode`'s `toString(text, { type: "svg", margin: 1 })`).
+- `staffToken.ts`: `STAFF_TOKEN_KEY = "slot-order.staff-token"`, `loadStaffToken(storage): string | null` (a
+  throwing storage → null), `saveStaffToken(storage, token)`, `clearStaffToken(storage)` (neither throws).
+
+### 11.3 Configuration and deployment
+- `apps/web/package.json` (`@slot-order/web`): `next` 16.4, `react` and `react-dom` 19, `tailwindcss` 4 with
+  `@tailwindcss/postcss`, `qrcode`, `@opennextjs/cloudflare` 1.20, `@slot-order/core` (workspace), `zod` (catalog);
+  dev: `wrangler` 4, `vitest`, `typescript`, the `@types`. Scripts: `dev` (`next dev`), `build` (`next build`),
+  `test` (`vitest run`), `typecheck` (`tsc --noEmit`), `preview` and `deploy` (`opennextjs-cloudflare build &&
+  opennextjs-cloudflare preview|deploy`), `cf-typegen`.
+- `next.config.ts`: `transpilePackages: ["@slot-order/core"]` (core ships TypeScript source) and
+  `initOpenNextCloudflareForDev()` at the end. `open-next.config.ts`: `defineCloudflareConfig()` (no incremental
+  cache: no ISR). `wrangler.toml`: `name = "slot-order-web"`, `main = ".open-next/worker.js"`, `compatibility_date`,
+  `compatibility_flags = ["nodejs_compat"]`, `[assets] directory = ".open-next/assets", binding = "ASSETS"`,
+  `upload_source_maps = true`, `[observability] enabled = true`. `public/_headers`: `/_next/static/*` immutable for a
+  year. `postcss.config.mjs` with `@tailwindcss/postcss`; `src/app/globals.css` with `@import "tailwindcss"`.
+- `NEXT_PUBLIC_API_URL` is baked in at build time: `.env.example` → `.env.local` (git-ignored) for development; the
+  CI deploy step sets it to the live API. No `.dev.vars`: the web Worker reads no bindings. Vitest with
+  `environment: "node"`; `lib` touches no DOM (storage is injected).
+- The API's `WEB_ORIGIN` becomes `https://slot-order-web.antonsplavnik.workers.dev` in `apps/api/wrangler.toml` (CORS
+  and Stripe's return URLs); `apps/api/.dev.vars` keeps `WEB_ORIGIN=http://localhost:3000` for local runs
+  (`.dev.vars.example` gains the line). CI's deploy job builds and deploys the web after the API (§14).
+- OpenNext rather than Cloudflare's newer vinext: §17.
+
+### 11.4 Tests (`apps/web/test/`)
+Unit tests of §11.2, the plan's list made exact: the cart (add and merge, quantities and clamps, remove, the promo
+code, local pricing equal to core's `priceCart`, the persistence round trip, a corrupt or throwing store → empty),
+the sections, the option rules, the day strip, chips and labels, the status texts per status and reason, the API
+client over a stub `fetch` (every method's path, query, headers and body; the schema parse of answers; each error
+mapping), the QR payload and SVG, the staff token, `apiBaseUrl`. No component tests: the screens are checked in the
+demo (§13 Manual).
 
 ## 12. Errors
 
@@ -766,7 +859,9 @@ no `postgres:17` service container is needed.
    (`supabase db reset`) and reviewed before it is pushed.
 2. `wrangler deploy` in `apps/api` with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (secrets live in Cloudflare, set
    once by hand with `wrangler secret put`).
-3. `opennextjs-cloudflare build && opennextjs-cloudflare deploy` in `apps/web` (from M6).
+3. `pnpm --filter @slot-order/web deploy` (`opennextjs-cloudflare build && opennextjs-cloudflare deploy`) with
+   `NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev` baked into the build and the same Cloudflare
+   secrets: the Worker `slot-order-web` (from M6).
 
 Markdown-only changes skip CI (`paths-ignore`).
 
@@ -776,7 +871,8 @@ Markdown-only changes skip CI (`paths-ignore`).
   `workerd` export condition, with the fetch client and Web Crypto as its defaults (verified in M5, §17). M0 note:
   with `compatibility_date = 2026-11-06`, wrangler 4.158 reports Node.js compatibility as already enabled without the
   flag; `@types/node` is in `apps/api` (the `stripe` package's peer dependency).
-- **Web:** Worker `slot-order-web` via OpenNext, `*.workers.dev`.
+- **Web:** Worker `slot-order-web` via OpenNext (`@opennextjs/cloudflare`, `nodejs_compat`, static assets from
+  `.open-next/assets`), `https://slot-order-web.antonsplavnik.workers.dev` (M6).
 - **Database:** the Supabase free-tier project `slot-order` (ref `ckvngajrwdijdtjvfblm`) in `eu-central-1` (Frankfurt),
   created 2026-11-07. The service-role key exists only as a Worker secret and in the Mac's git-ignored `.env`
   (`SUPABASE_SERVICE_ROLE_KEY_CLOUD`, beside the database password and the project ref).
@@ -828,8 +924,18 @@ git-ignored; nothing in the committed repo names the company this was written fo
   from the caller's clock is refused now and then; §9.1 sends 31 minutes. Sources:
   [Stripe, Manage limited inventory](https://docs.stripe.com/payments/checkout/managing-limited-inventory),
   [Stripe, expire a session](https://docs.stripe.com/api/checkout/sessions/expire?lang=node).
-- **Next.js on Cloudflare.** `@opennextjs/cloudflare` 1.20.x supports Next.js 16 (peer `16.3.x`) and 15.5; build with
-  `opennextjs-cloudflare build`, deploy with `wrangler`; needs `nodejs_compat`. Sources:
+- **Next.js on Cloudflare.** `@opennextjs/cloudflare` 1.20.16 (2026-11-03) has the peer range `next >=15.5.29 <16 ||
+  >=16.4.5` and `wrangler ^4.148`; `next` 16.4.5 is current. The setup (verified 2026-11-07 on the OpenNext and
+  Cloudflare guides): `open-next.config.ts` with `defineCloudflareConfig()`, a wrangler config with `main =
+  ".open-next/worker.js"`, `nodejs_compat`, the `ASSETS` binding on `.open-next/assets`, scripts `preview` and
+  `deploy` (`opennextjs-cloudflare build && … preview|deploy`), `initOpenNextCloudflareForDev()` in `next.config.ts`
+  for bindings in `next dev` (harmless here), `.open-next` git-ignored, `public/_headers` for immutable static files;
+  the edge runtime is not supported. Cloudflare now recommends **vinext** (its Vite-based reimplementation of the
+  Next.js API, released 2026-02) for new apps and keeps OpenNext documented for existing ones; vinext's own README
+  calls OpenNext the more mature and battle-tested path, and vinext has no build-time static prerendering yet. §11
+  stays with OpenNext (the known adapter over a standard `next build`), Vercel as the fallback (§3). Sources:
+  [OpenNext, get started](https://opennext.js.org/cloudflare/get-started), [Cloudflare, OpenNext
+  guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/opennext/), [vinext](https://github.com/skywalker512/vinext). Earlier note:
   [release 1.20.3](https://github.com/opennextjs/opennextjs-cloudflare/releases/tag/@opennextjs%2Fcloudflare@1.20.3),
   [Vercel's comparison](https://vercel.com/kb/guide/next-js-on-vercel-vs-cloudflare.md).
 - **Supabase CLI in CI.** The CLI reference lists `supabase db start` beside `supabase start` as a way to start the local
