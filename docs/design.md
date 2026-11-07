@@ -651,7 +651,8 @@ no `postgres:17` service container is needed.
 Markdown-only changes skip CI (`paths-ignore`).
 
 ### Where it runs
-- **API:** Worker `slot-order-api`, `*.workers.dev`, Cron Trigger every minute, `nodejs_compat` only if the Stripe SDK
+- **API:** Worker `slot-order-api` at `https://slot-order-api.antonsplavnik.workers.dev` (live since 2026-11-07), Cron
+  Trigger every minute, `nodejs_compat` only if the Stripe SDK
   needs it (verified in M5; the spec records the answer). M0 note: with `compatibility_date = 2026-11-06`, wrangler
   4.158 reports Node.js compatibility as already enabled without the flag; `@types/node` is added to `apps/api` when a
   `node:` import first appears.

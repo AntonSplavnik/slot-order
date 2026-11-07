@@ -86,4 +86,6 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
 
 ## Live
 
-_Filled in after M4 (API) and M6 (web)._
+- **API:** https://slot-order-api.antonsplavnik.workers.dev (Cloudflare Workers, Frankfurt-region Supabase behind it).
+  Try `GET /health`, `GET /menu`, `GET /slots?date=YYYY-MM-DD` (Sundays answer `closed`). Deployed by CI from `main`.
+- **Web app:** after M6.
