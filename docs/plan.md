@@ -198,11 +198,12 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** "After M6": wait for CI's deploy from `main` (migrations, API, web), run the production check of
-the whole flow against the live URLs (the web app's pages, a `POST /orders` with a Checkout URL, a webhook event
-replayed from the Stripe dashboard); then `MESSAGE.md` (private, git-ignored; Anton's voice, never "this fixes your
-problem"), the CV entry in `~/Documents/Job/pipeline/profile.yaml` (outside this repo), a last read of the README.
-M7 (POS adapter) only if time is left, spec §16 first.
+**Next action:** Anton merges PR #8 (the CI web deploy step: `run deploy`); CI then deploys the web from `main` for
+the first time (the API and the migrations already deployed from `main` on 2026-11-07, run `79d91c0d`). Production
+check done 2026-11-07 after the merge: API health, menu, validation, every web page 200, CORS for the web origin,
+the webhook replay still a duplicate, the M5 demo order `picked_up` by Anton's phone run. Open with Anton:
+`MESSAGE.md` (drafted, private), the CV entry (proposed, waiting for his go-ahead; the pipeline's rule). M7 only
+if time is left.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|

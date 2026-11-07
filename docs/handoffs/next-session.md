@@ -10,9 +10,11 @@
   for a less bare UI; the polish pass `a269fcf` answered it and is the README's first "What the agent got wrong and
   what I changed" entry. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database
   122, typecheck, Biome, `next build`, the OpenNext build. CI deploys both Workers from `main`.
-- **Not done:** the production check after CI's deploy from `main` (the pages, a `POST /orders` with a Checkout
-  URL, an event replayed from the Stripe dashboard); `MESSAGE.md` (private, git-ignored); the CV entry
-  (`~/Documents/Job/pipeline/profile.yaml`, outside the repo); M7 (POS mock) only if time is left.
+- **Not done:** PR #8 (the CI web deploy step needed `run deploy`; the first `main` run after the M6 merge failed
+  only there; the live web Worker is the hand deploy of the same commit) waits for Anton's merge, then the first CI
+  web deploy must be checked; `MESSAGE.md` is drafted (private, both languages), Anton edits and sends it; the CV
+  entry is proposed in chat and waits for his go-ahead (`~/Documents/Job/pipeline/profile.yaml`, then
+  `render_cv.py`); M7 (POS mock) only if time is left. The production check after the merge passed.
 - **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; Worker (API) `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` is baked in by the
