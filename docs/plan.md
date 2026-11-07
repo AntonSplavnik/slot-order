@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **implementation green** 2026-11-07: core 373, web 218, API 287, typecheck, check, `next build`, OpenNext build; `WEB_ORIGIN` → the web Worker, CI web deploy step added | | branch `m6-web`; next: Anton deploys the API (new `WEB_ORIGIN`) and the web Worker by hand, the phone demo, PR |
+| M6 | **demo ok (agent checks), PR open** 2026-11-07; the web Worker live at `slot-order-web.antonsplavnik.workers.dev` (deployed by hand by Anton), every route 200, the live API address in the bundle, CORS from the web origin ok; Anton's phone run pending | #7 | core 373, web 218, API 287; the API redeployed with `WEB_ORIGIN` = the web Worker |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,13 +198,12 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M6 (web), branch `m6-web`: the implementer is building the library and the screens against the red
-suite (commit `ab82f73`). When it reports: read the diff, run `pnpm test`, `pnpm typecheck`, `pnpm check`,
-`pnpm --filter @slot-order/web build`, write its decisions into §11 and the change log, commit `M6: web (green)`;
-then Anton deploys by hand (`! pnpm --filter @slot-order/api exec wrangler deploy` for the new `WEB_ORIGIN`, and
-`! NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm --filter @slot-order/web deploy`);
-the phone demo (menu → options → checkout → slot → test card → QR; second phone: scan → picked up; the error paths);
-PR; stop.
+**Next action:** Anton runs the phone demo on https://slot-order-web.antonsplavnik.workers.dev (menu → options →
+checkout → slot → test card → QR; a second phone scans it → "Picked up ✓"; `/staff` with the production staff
+token; the error paths: a Sunday, a full slot, an expired hold) and reviews PR #7; anything he changes is an entry
+for the README's "What the agent got wrong". After his merge: `git checkout main && git pull`, Status → `merged`,
+CI deploys the API and the web from `main` (same code as the hand deploys). Then "After M6": the README's final
+sections, `MESSAGE.md` (private), the production check, the CV entry.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
