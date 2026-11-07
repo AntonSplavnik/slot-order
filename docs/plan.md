@@ -33,7 +33,7 @@ production check, CV.
 | M2 | Core: pricing + VAT + promo + order transitions + tests | Money and rounding errors | The §7.4 receipt printed by a test |
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
-| M5 | **implementation green** 2026-11-07: core 373, API 287, db 122, Berlin run, typecheck, check; green commit on `m5-stripe` | | next: Stripe test key from Anton, Worker secrets, deploy by hand, demo, PR |
+| M5 | **demo ok, PR open** 2026-11-07 | #6 | 287 API tests (116 new) + 122 db; live demo: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session; migration and Worker deployed by hand from the branch by Anton (the agent sandbox refuses production deploys); Worker secrets and the webhook endpoint set |
 | M6 | Next.js + Tailwind flow and staff board + QR check-in + deploy | UI and the OpenNext deploy | Phone: order → pay → QR; second phone: scan → picked up |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
@@ -198,13 +198,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M5 (Stripe), branch `m5-stripe`, implementation green and committed. Stripe setup with Anton: he
-puts `STRIPE_SECRET_KEY=sk_test_…` into `.env` (git-ignored); the orchestrator creates the webhook endpoint
-`https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe` (events `checkout.session.completed`,
-`checkout.session.expired`) with the Stripe CLI or Anton does it in the dashboard, and the signing secret goes into
-`.env` as `STRIPE_WEBHOOK_SECRET`; `wrangler secret put` ×2 from `.env` without printing; `.dev.vars` for local; a
-deploy by hand from the branch; the demo (test card → `paid`, the replayed event → `{ duplicate: true }`, the cron
-expiring an unpaid hold's session); push, PR, stop for Anton's review.
+**Next action:** Anton reviews PR #6 (`m5-stripe`). After his merge: `git checkout main && git pull`, Status → `merged`;
+CI deploys `main` (the migration is already in the cloud, `db push` applies nothing); check `/health` and one
+`POST /orders` on the live Worker. Then M6 (web app) per the plan: contract first (§11), test brief, test agent,
+implementer, OpenNext deploy. Note for M6: `WEB_ORIGIN` in `wrangler.toml` must become the web app's URL (Stripe's
+success and cancel URLs point there).
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
