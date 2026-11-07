@@ -41,6 +41,13 @@ describe("tables (§5)", () => {
       where n.nspname = 'public' and c.relkind = 'r' and c.relname = ${table}`;
     expect([...rows]).toEqual([{ rls: true, policies: 0 }]);
   });
+
+  test("orders.checkout_url is a nullable text column (M5, §5 orders)", async () => {
+    const rows = await sql`
+      select data_type, is_nullable from information_schema.columns
+      where table_schema = 'public' and table_name = 'orders' and column_name = 'checkout_url'`;
+    expect([...rows]).toEqual([{ data_type: "text", is_nullable: "YES" }]);
+  });
 });
 
 describe("settings (§5)", () => {

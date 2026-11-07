@@ -13,12 +13,14 @@ import type { z } from "zod";
 import { line, seedMenu } from "../../../../packages/core/test/fixtures/menu";
 import { seedConfig } from "../../../../packages/core/test/fixtures/slotConfigs";
 import { type AppDeps, createApp } from "../../src/app";
+import { createFakePayments, type FakePayments } from "../../src/payments/fake";
 import { createMemoryRepository } from "../../src/repo/memory";
 
-// The route tests' world (docs/design.md §10.3, docs/handoffs/m4-api-tests.md): the app built from
-// AppDeps with the in-memory repository on the seed, a clock the test sets, the staff token, the web
-// origin, and random bytes from a counter, so pickup codes are known in advance. Nothing reads the real
-// clock; nothing touches the network.
+// The route tests' world (docs/design.md §10.3, docs/handoffs/m4-api-tests.md, m5-stripe-tests.md): the
+// app built from AppDeps with the in-memory repository on the seed, a clock the test sets, the staff
+// token, the web origin, random bytes from a counter, so pickup codes are known in advance, and the fake
+// payments (§9.4), which record every call and sign webhook events offline. Nothing reads the real clock;
+// nothing touches the network.
 
 export { line, seedConfig, seedMenu };
 
@@ -36,6 +38,11 @@ export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 /** `iso` moved by `minutes`, as an ISO string. */
 export function plusMinutes(iso: string, minutes: number): string {
   return new Date(new Date(iso).getTime() + minutes * 60_000).toISOString();
+}
+
+/** An instant in epoch seconds, as Stripe counts (`expires_at`, the signature's `t`). */
+export function seconds(instant: Date): number {
+  return Math.floor(instant.getTime() / 1000);
 }
 
 // The clock and the random bytes.
@@ -86,12 +93,19 @@ function counterBytes(): (n: number) => Uint8Array {
 
 // The dependencies and the app.
 
-export type TestDeps = AppDeps & { clock: Clock };
+/** The dependencies a route test reads back: the clock it moves and the fake payments whose `calls` it
+ * checks. */
+export type TestDeps = AppDeps & { clock: Clock; payments: FakePayments };
+
+/** What a test may replace; payments only by another fake, so `deps.payments.calls` stays readable. */
+export type DepsOverrides = Partial<Omit<AppDeps, "payments">> & { payments?: FakePayments };
 
 /** AppDeps for a route test: the memory repository on the seed, the clock at NOW, the staff token, the
- * web origin and the counter's bytes; `overrides` replace any of them. */
-export function makeDeps(overrides: Partial<AppDeps> = {}): TestDeps {
+ * web origin, the counter's bytes and a fresh `createFakePayments()`; `overrides` replace any of them. */
+export function makeDeps(overrides: DepsOverrides = {}): TestDeps {
   const clock = makeClock(NOW);
+  // Built first, so the test and the app share the one fake.
+  const payments = overrides.payments ?? createFakePayments();
   return {
     repo: overrides.repo ?? createMemoryRepository({ settings: seedConfig, menu: seedMenu }),
     now: () => clock.now(),
@@ -99,6 +113,7 @@ export function makeDeps(overrides: Partial<AppDeps> = {}): TestDeps {
     webOrigin: WEB_ORIGIN,
     randomBytes: counterBytes(),
     ...overrides,
+    payments,
     clock,
   };
 }
@@ -106,7 +121,7 @@ export function makeDeps(overrides: Partial<AppDeps> = {}): TestDeps {
 export type TestApp = ReturnType<typeof createApp>;
 
 /** A fresh app on fresh dependencies: no state is shared between tests. */
-export function makeApp(overrides: Partial<AppDeps> = {}): { app: TestApp; deps: TestDeps } {
+export function makeApp(overrides: DepsOverrides = {}): { app: TestApp; deps: TestDeps } {
   const deps = makeDeps(overrides);
   return { app: createApp(deps), deps };
 }
@@ -206,7 +221,8 @@ export async function placeOrder(
   return expectJson(res, 201, CreateOrderResponseSchema).order;
 }
 
-/** What the webhook will do in M5: `held → paid` at the clock's instant, straight on the repository. */
+/** The webhook's `held → paid` (§9.2) at the clock's instant, straight on the repository: a shortcut for
+ * the tests about what comes after payment. */
 export async function payOrder(deps: AppDeps, id: string): Promise<void> {
   const paid = await deps.repo.transition(id, "held", "paid", deps.now());
   expect(paid?.status).toBe("paid");
@@ -224,4 +240,73 @@ export function byLabel<T extends { label: string }>(slots: readonly T[], label:
   const slot = slots.find((candidate) => candidate.label === label);
   if (slot === undefined) throw new Error(`no slot labelled ${label}`);
   return slot;
+}
+
+// Stripe webhooks (§9.2). Events are signed by the fake (`deps.payments.signedEvent(raw, at)`) with its
+// test secret at an instant the test chooses, so nothing reads the real clock.
+
+/** The Checkout Session URL the fake answers for `sessionId` (§9.4). */
+export function checkoutUrlOf(sessionId: string): string {
+  return `https://checkout.stripe.com/c/pay/${sessionId}`;
+}
+
+export type StripeEventFields = {
+  /** The event id; default `evt_1`. */
+  id?: string;
+  /** Default `checkout.session.completed`. */
+  type?: string;
+  /** `data.object.id`, the Checkout Session; default `cs_test_1` (the first order's session). */
+  sessionId?: string;
+  /** `data.object.payment_status`; default `paid`. */
+  paymentStatus?: string;
+  /** `data.object.payment_intent`: an id, an expanded object, or null; default `pi_1`. */
+  paymentIntent?: string | { id: string } | null;
+  /** `data.object.metadata.order_id`; `null` sends the session without `metadata`. */
+  orderId: string | null;
+};
+
+/** A webhook event in Stripe's shape (`{ id, object, type, data: { object: <Checkout Session> } }`) with
+ * the fields §9.2 reads; what the fake signs. */
+export function stripeEvent({
+  id = "evt_1",
+  type = "checkout.session.completed",
+  sessionId = "cs_test_1",
+  paymentStatus = "paid",
+  paymentIntent = "pi_1",
+  orderId,
+}: StripeEventFields) {
+  return {
+    id,
+    object: "event",
+    type,
+    data: {
+      object: {
+        id: sessionId,
+        object: "checkout.session",
+        payment_status: paymentStatus,
+        payment_intent: paymentIntent,
+        ...(orderId === null ? {} : { metadata: { order_id: orderId } }),
+      },
+    },
+  };
+}
+
+/** A webhook request: the raw body and the `Stripe-Signature` header, `null` to send none. */
+export type WebhookRequest = { body: string; signature: string | null };
+
+/** `POST /webhooks/stripe` with `signed.body` as the raw string, `Stripe-Signature: signed.signature`
+ * and `Content-Type: application/json`; `headers` add to them. */
+export async function postWebhook(
+  app: Requestable,
+  signed: WebhookRequest,
+  headers: Record<string, string> = {},
+): Promise<TestResponse> {
+  return request(app, "POST", "/webhooks/stripe", {
+    body: signed.body,
+    headers: {
+      "Content-Type": "application/json",
+      ...(signed.signature === null ? {} : { "Stripe-Signature": signed.signature }),
+      ...headers,
+    },
+  });
 }

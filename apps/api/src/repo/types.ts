@@ -24,6 +24,8 @@ export type Order = {
   promoCode: string | null;
   pickupCode: string;
   stripeSessionId: string | null;
+  /** The Checkout Session's URL (§9.1), stored with the id by `setCheckout`. */
+  checkoutUrl: string | null;
   stripePaymentIntentId: string | null;
   holdExpiresAt: Date | null;
   cancelReason: CancelReason | null;
@@ -64,7 +66,7 @@ export class InvalidStatusError extends Error {
   }
 }
 
-export type TransitionPatch = { stripePaymentIntentId?: string };
+export type TransitionPatch = { stripePaymentIntentId?: string; cancelReason?: CancelReason };
 
 export interface Repository {
   getSettings(): Promise<SlotConfig>;
@@ -79,12 +81,14 @@ export interface Repository {
   listOrders(from: Date, to: Date): Promise<Order[]>;
   /**
    * The conditional update `WHERE status IN from`: sets `status = to` and the matching timestamp
-   * (`paidAt`, `readyAt`, `pickedUpAt`) to `at`, plus the patch; `null` when no row matched.
+   * (`paidAt`, `readyAt`, `pickedUpAt`, `cancelledAt`) to `at`, plus the patch; `null` when no row
+   * matched. §8.2: `held → paid`, `paid → ready`, `paid | ready → picked_up`, and `expired → cancelled`
+   * with a `cancelReason` (the refund case, §9.3; no slot change: `expired` released the items already).
    */
   transition(
     id: string,
     from: OrderStatus | OrderStatus[],
-    to: "paid" | "ready" | "picked_up",
+    to: "paid" | "ready" | "picked_up" | "cancelled",
     at: Date,
     patch?: TransitionPatch,
   ): Promise<Order | null>;
@@ -97,12 +101,17 @@ export interface Repository {
   ): Promise<Order | null>;
   /** `release_expired_holds`. */
   releaseExpiredHolds(now: Date): Promise<Order[]>;
-  /** `reserve_for_paid`: `SlotFullError` or `InvalidStatusError`. */
-  reserveForPaid(id: string, capacity: number, paymentIntentId: string, now: Date): Promise<Order>;
-  /** M5: the Stripe session of a held order. */
+  /** `reserve_for_paid`: `SlotFullError` or `InvalidStatusError`. The intent may be unknown (§9.2). */
+  reserveForPaid(
+    id: string,
+    capacity: number,
+    paymentIntentId: string | null,
+    now: Date,
+  ): Promise<Order>;
+  /** The Checkout Session's id and URL on the order (§9.1). */
   setCheckout(id: string, sessionId: string, checkoutUrl: string): Promise<void>;
-  /** M5: `false` when the event id was already recorded. */
+  /** `INSERT INTO stripe_events`; `false` when the event id was already recorded (§9.2 step 3). */
   recordStripeEvent(id: string, type: string, orderId: string | null): Promise<boolean>;
-  /** M5: after a failed handling, so Stripe's retry is processed. */
+  /** After a failed handling, so Stripe's retry is processed (§9.2 step 5). */
   deleteStripeEvent(id: string): Promise<void>;
 }

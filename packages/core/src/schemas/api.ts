@@ -72,6 +72,13 @@ export const CreateOrderResponseSchema = z.object({
 });
 export type CreateOrderResponse = z.infer<typeof CreateOrderResponseSchema>;
 
+/** `POST /webhooks/stripe` (§9.2): received, or an event id seen before that changed nothing. */
+export const WebhookResponseSchema = z.union([
+  z.object({ received: z.literal(true) }),
+  z.object({ duplicate: z.literal(true) }),
+]);
+export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
+
 export const StaffOrderSchema = z.object({
   id: z.uuid(),
   status: OrderStatusSchema,

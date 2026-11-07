@@ -237,6 +237,7 @@ export function createMemoryRepository(seed: { settings: SlotConfig; menu: Menu 
           promoCode: order.promoCode,
           pickupCode: order.pickupCode,
           stripeSessionId: null,
+          checkoutUrl: null,
           stripePaymentIntentId: null,
           holdExpiresAt: new Date(holdExpiresAt),
           cancelReason: null,

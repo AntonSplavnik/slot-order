@@ -71,6 +71,7 @@ function newOrder(
 /** Every field `placeHold` leaves empty (§5 orders). */
 const EMPTY_FIELDS = {
   stripeSessionId: null,
+  checkoutUrl: null,
   stripePaymentIntentId: null,
   cancelReason: null,
   paidAt: null,
@@ -310,6 +311,49 @@ export function describeRepositoryContract(name: string, open: () => Promise<Rep
         await repo.transition(held.id, "ready", "picked_up", T);
         expect(await usageAt(S)).toEqual({ booked: 3, capacity: 20 });
       });
+
+      test("expired → cancelled with refunded_slot_full (M5): cancelledAt and the reason, expiredAt kept, no slot change", async () => {
+        const held = await hold(1);
+        const expired = await repo.releaseHold(held.id, "expired", null, T);
+        expect(await usageAt(S)).toEqual({ booked: 0, capacity: 20 });
+        const at = plusMinutes(T, 2);
+
+        const cancelled = await repo.transition(held.id, "expired", "cancelled", at, {
+          cancelReason: "refunded_slot_full",
+        });
+        expect(cancelled).toEqual({
+          ...expired,
+          status: "cancelled",
+          cancelledAt: at,
+          cancelReason: "refunded_slot_full",
+        });
+        expect(cancelled?.expiredAt).toEqual(T);
+        expect(await current(held.id)).toEqual(cancelled);
+        // §8.2: `expired` released the items already; the cancel does not touch the slot.
+        expect(await usageAt(S)).toEqual({ booked: 0, capacity: 20 });
+      });
+
+      test("expired → cancelled is null for a held order, which stays held with its items (M5)", async () => {
+        const held = await hold(1);
+        expect(
+          await repo.transition(held.id, "expired", "cancelled", T, {
+            cancelReason: "refunded_slot_full",
+          }),
+        ).toBeNull();
+        expect(await current(held.id)).toEqual(held);
+        expect(await usageAt(S)).toEqual({ booked: 3, capacity: 20 });
+      });
+
+      test("expired → cancelled is null for a paid order, which stays paid (M5)", async () => {
+        const held = await hold(1);
+        const paid = await repo.transition(held.id, "held", "paid", T);
+        expect(
+          await repo.transition(held.id, "expired", "cancelled", plusMinutes(T, 1), {
+            cancelReason: "refunded_slot_full",
+          }),
+        ).toBeNull();
+        expect(await current(held.id)).toEqual(paid);
+      });
     });
 
     describe("releaseHold(id, status, reason, now)", () => {
@@ -423,6 +467,21 @@ export function describeRepositoryContract(name: string, open: () => Promise<Rep
         expect(await usageAt(S)).toEqual({ booked: 3, capacity: 20 });
       });
 
+      test("a null payment intent (a completed session without one, M5): paid with stripePaymentIntentId null", async () => {
+        const held = await hold(1);
+        const expired = await repo.releaseHold(held.id, "expired", null, T);
+        const now = plusMinutes(T, 2);
+        const paid = await repo.reserveForPaid(held.id, CAPACITY, null, now);
+        expect(paid).toEqual({
+          ...expired,
+          status: "paid",
+          paidAt: now,
+          stripePaymentIntentId: null,
+        });
+        expect(await current(held.id)).toEqual(paid);
+        expect(await usageAt(S)).toEqual({ booked: 3, capacity: 20 });
+      });
+
       test("InvalidStatusError for a paid order and for an unknown id (§5: only from expired)", async () => {
         const held = await hold(1);
         await repo.transition(held.id, "held", "paid", T);
@@ -436,11 +495,27 @@ export function describeRepositoryContract(name: string, open: () => Promise<Rep
     });
 
     describe("setCheckout(id, sessionId, checkoutUrl) (M5)", () => {
-      test("stores the session id on the held order", async () => {
+      const URL = "https://checkout.stripe.com/c/pay/cs_1";
+
+      test("stores the session id and the URL on the held order, and nothing else", async () => {
         const held = await hold(1);
-        await repo.setCheckout(held.id, "cs_1", "https://checkout.stripe.com/c/pay/cs_1");
-        // The URL goes into M5's column; until then the contract pins only the session id.
-        expect(await current(held.id)).toMatchObject({ status: "held", stripeSessionId: "cs_1" });
+        await repo.setCheckout(held.id, "cs_1", URL);
+        expect(await current(held.id)).toEqual({
+          ...held,
+          stripeSessionId: "cs_1",
+          checkoutUrl: URL,
+        });
+      });
+
+      test("stores them on an order in any status, a paid one too (§10.2)", async () => {
+        const held = await hold(1);
+        const paid = await repo.transition(held.id, "held", "paid", T);
+        await repo.setCheckout(held.id, "cs_1", URL);
+        expect(await current(held.id)).toEqual({
+          ...paid,
+          stripeSessionId: "cs_1",
+          checkoutUrl: URL,
+        });
       });
     });
 

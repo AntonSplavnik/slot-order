@@ -28,7 +28,12 @@ import {
 // PostgREST's message (never a key: the client keeps those in its headers).
 
 /** The `*_at` column `transition` stamps for each target status (§8.2). */
-const STAMP_COLUMN = { paid: "paid_at", ready: "ready_at", picked_up: "picked_up_at" } as const;
+const STAMP_COLUMN = {
+  paid: "paid_at",
+  ready: "ready_at",
+  picked_up: "picked_up_at",
+  cancelled: "cancelled_at",
+} as const;
 
 /** PostgREST's answer for a unique violation. */
 const UNIQUE_VIOLATION = "23505";
