@@ -6,7 +6,8 @@
 - **Merged:** M0 (#1), M1 slots (#2), M2 pricing and orders (#3), M3 Supabase (#4), M4 Hono API (#5). `main` is at
   the M4 merge; CI on `main` ran checks, database tests, `supabase db push --remote` and `wrangler deploy`, all green.
 - **Live:** API `https://slot-order-api.antonsplavnik.workers.dev` (Worker `slot-order-api`, cron `* * * * *`,
-  secrets `SUPABASE_SERVICE_ROLE_KEY` and `STAFF_TOKEN` set). Database: Supabase `slot-order`, ref
+  secrets `SUPABASE_SERVICE_ROLE_KEY` and `STAFF_TOKEN` set; the production cron verified: a demo hold flipped to
+  `expired` at its 10-minute mark). Database: Supabase `slot-order`, ref
   `ckvngajrwdijdtjvfblm`, migrations and seed applied, RLS verified from outside.
 - **Tests:** core 373, API routes 171, database 116 (78 schema/functions + 38 repository contract); the same contract
   runs against the in-memory repository in `pnpm test`. All green under `TZ=UTC` and `TZ=Europe/Berlin`.

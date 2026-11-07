@@ -210,7 +210,7 @@ keys, the demo, PR, stop.
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
-| M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
+| M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | not started | | |
 | M6 | not started | | |
 
