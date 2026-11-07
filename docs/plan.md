@@ -174,11 +174,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M3 at `demo ok, PR open` (#4); waiting for Anton's review and for his go-ahead to create the Supabase
-cloud project (`supabase projects create slot-order --org-id rdptzsfolrrzuokfqrfr --region eu-central-1 --db-password
-$SUPABASE_DB_PASSWORD --yes`, password already in the git-ignored `.env`), then `supabase link`, `supabase db push`,
-`gh secret set SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_ID SUPABASE_DB_PASSWORD`. After merge: M4 (Hono API) on
-`m4-api`; it needs Anton's Cloudflare account for the deploy at its end.
+**Next action:** M3 at `demo ok, PR open` (#4); waiting for Anton's review. Anton still has to create a Supabase personal
+access token (supabase.com/dashboard/account/tokens) and run `gh secret set SUPABASE_ACCESS_TOKEN`, which M4's deploy
+job needs for `supabase db push`. After merge: M4 (Hono API) on `m4-api`; its deploy at the end needs Anton's
+Cloudflare account (`wrangler login`).
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -186,13 +185,14 @@ $SUPABASE_DB_PASSWORD --yes`, password already in the git-ignored `.env`), then 
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
-| M3 | **demo ok, PR open** 2026-11-06 | #4 | 78 db tests green twice back to back; CI database job added; cloud project not created yet (needs Anton's go-ahead for the CLI's `--yes`) |
+| M3 | **demo ok, PR open** 2026-11-06 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | not started | | |
 | M5 | not started | | |
 | M6 | not started | | |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M3 (cloud): §14 `supabase db push --remote` (CLI 3 targets the local database without the flag; found when the first push applied nothing); the seed applied once with `--include-seed`; the project ref recorded. RLS verified against the cloud: anon reads `[]`, rpc refused `42501`.
 - 2026-11-06, M3 (after the implementer's report): §5 `reserve_for_paid` updates the order before reserving the slot (same lock order as `release_hold`); `release_slot` raises `invalid_items`; `release_expired_holds` uses `FOR UPDATE SKIP LOCKED` and `<`; extra CHECKs listed; `stripe_events.order_id` has no foreign key; explicit `GRANT … TO service_role`. Harness: PostgREST warmed up after `db reset` (stale connections made a race test flaky back to back).
 - 2026-11-06, M3 (after the test agent's report): `promo_codes.sort`; §5 notes that PostgREST returns a `NULL` row as an all-null object (M4 checks `id === null`).
 - 2026-11-06, M3 (contract): §5 function signatures take `p_now` / `p_hold_expires_at` / `p_payment_intent_id`; `release_slot` returns the row; `slot_booked_mismatches()` added; `combo_components.sort`; migrations named `<timestamp>_<name>.sql`; the row mapping `apps/api/src/db/rows.ts`; `VAT_RATES_DE_2026` in core; §13 Database row rewritten.

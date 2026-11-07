@@ -68,5 +68,6 @@ pnpm check                     # Biome lint + format check (`pnpm format` to fix
 - Every order status change is a conditional `UPDATE … WHERE status = <from>`; `canTransition` in `core` is the table.
 - The webhook inserts the Stripe event id before processing; duplicates answer 200 and do nothing.
 - RLS is on for every table with no policies; the browser never sees a Supabase key.
-- `supabase db push` runs from CI on `main` only (once by hand in M3).
+- `supabase db push --remote` runs from CI on `main` only (once by hand in M3, with `--include-seed`); the local
+  database is `supabase db reset`.
 - English everywhere. If time runs short, cut UI, never tests.

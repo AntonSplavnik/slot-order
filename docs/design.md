@@ -109,7 +109,7 @@ phone / laptop ── Next.js on Cloudflare (apps/web) ── fetch ──▶ Ho
   (the server re-prices on order), and calls the API through one small client (`src/lib/api.ts`). `next.config`
   lists `@slot-order/core` in `transpilePackages`.
 - **`supabase/`**: plain SQL migrations (`<timestamp>_<name>.sql`, as the CLI orders them), the SQL functions, the seed.
-  Applied locally with `supabase db reset`, to the cloud with `supabase db push` from CI.
+  Applied locally with `supabase db reset`, to the cloud with `supabase db push --remote` from CI.
 
 ### Technology
 | Part | Choice |
@@ -564,8 +564,11 @@ Supabase CLI: `supabase/setup-cli`, then `supabase start -x studio,imgproxy,inbu
 no `postgres:17` service container is needed.
 
 ### Deploys (push to `main`, after the checks)
-1. `supabase db push` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`. A migration is always
-   run locally first (`supabase db reset`) and reviewed before it is pushed.
+1. `supabase db push --remote` with `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`: migrations
+   only (CLI 3: without `--remote` the command targets the local database). The seed (plain inserts, not idempotent)
+   was applied **once**, by hand, with `supabase db push --remote --include-seed` when the project was created
+   (2026-11-07); menu changes after that are migrations. A migration is always run locally first
+   (`supabase db reset`) and reviewed before it is pushed.
 2. `wrangler deploy` in `apps/api` with `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (secrets live in Cloudflare, set
    once by hand with `wrangler secret put`).
 3. `opennextjs-cloudflare build && opennextjs-cloudflare deploy` in `apps/web` (from M6).
@@ -578,8 +581,9 @@ Markdown-only changes skip CI (`paths-ignore`).
   4.158 reports Node.js compatibility as already enabled without the flag; `@types/node` is added to `apps/api` when a
   `node:` import first appears.
 - **Web:** Worker `slot-order-web` via OpenNext, `*.workers.dev`.
-- **Database:** a Supabase free-tier project in `eu-central-1` (Frankfurt). The service-role key exists only as a Worker
-  secret and in the Mac's `.dev.vars`.
+- **Database:** the Supabase free-tier project `slot-order` (ref `ckvngajrwdijdtjvfblm`) in `eu-central-1` (Frankfurt),
+  created 2026-11-07. The service-role key exists only as a Worker secret and in the Mac's git-ignored `.env`
+  (`SUPABASE_SERVICE_ROLE_KEY_CLOUD`, beside the database password and the project ref).
 - **Stripe:** a test-mode webhook endpoint pointing at the Worker; the signing secret stored with `wrangler secret put`.
 
 ## 15. Development setup
