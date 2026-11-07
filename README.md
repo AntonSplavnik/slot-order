@@ -12,7 +12,22 @@ first, AI agents writing against the tests, every milestone reviewed before the 
 
 ## Architecture in 30 seconds
 
-_Filled in during M4–M6._
+```
+browser ── Next.js (M6) ──▶ Hono on Cloudflare Workers (apps/api) ──▶ Supabase Postgres (supabase/)
+                              │  every route: validate with a core schema → call core → repository → map
+                              ├──▶ Stripe Checkout + webhook (M5)
+                              └── Cron Trigger every minute: release expired holds
+```
+
+- **`packages/core`**: the rules, pure TypeScript with no I/O: slots (grid, DST, prep time, cut-off, horizon),
+  pricing (integer cents, VAT per part, promo codes), order transitions, pickup codes, and every API schema (Zod).
+  Most of the tests live here.
+- **`apps/api`**: Hono on Workers. A `Repository` interface with two implementations, in-memory for the route tests
+  and Supabase for production, held to one contract test that runs against both. Capacity is enforced only in
+  Postgres: `reserve_slot` is one conditional `UPDATE`, so 50 concurrent callers for the last place get exactly one
+  winner.
+- **`supabase/`**: plain SQL migrations (tables with CHECKs, RLS on with no policies, the functions), the seed.
+- **`apps/web`** (M6): the customer flow and the staff board; talks only to the API.
 
 ## Run it
 
@@ -23,16 +38,19 @@ Prerequisites: Node 24+, pnpm 11 (pinned in `packageManager`), Docker, the Supab
 pnpm install
 supabase start                 # local Postgres + PostgREST in Docker
 supabase db reset              # migrations + the Goldhahn seed, from scratch
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # local service-role key from `supabase status`, a STAFF_TOKEN
 pnpm dev                       # the API on http://localhost:8787 (and the web app on :3000 from M6)
 curl localhost:8787/health     # {"ok":true}
+curl localhost:8787/menu       # the Goldhahn menu from the local database
+curl "localhost:8787/slots?date=2026-11-09"
 ```
 
-_Supabase, Stripe and the web app are wired in during M3–M6._
+_Stripe and the web app are wired in during M5–M6._
 
 ## Tests
 
 ```sh
-pnpm test        # core and API unit tests; no network, no database
+pnpm test        # core (373) and API route tests (171, in-memory repository); no network, no database
 pnpm --filter @slot-order/core test:berlin   # the core suite again with the process in Berlin time (§6.3)
 pnpm typecheck   # TypeScript, with the Workers runtime types from `wrangler types`
 pnpm check       # Biome lint and format (`pnpm format` fixes)
@@ -45,7 +63,8 @@ discounts spread by largest remainder, combo splits, the VAT summary, two worked
 the order transitions and pickup codes (`test/orders/`, 77 tests).
 
 ```sh
-pnpm test:db     # against local Supabase: migrations, seed, the SQL functions, RLS, and the 50-parallel reservation
+pnpm test:db     # against local Supabase: migrations, seed, the SQL functions, RLS, the 50-parallel reservation,
+                 # and the repository contract against the real database
 ```
 
 The database suite (`apps/api/test/db/`, 78 tests) resets the local stack from the migrations and seed, maps the seed
@@ -67,4 +86,6 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
 
 ## Live
 
-_Filled in after M4 (API) and M6 (web)._
+- **API:** https://slot-order-api.antonsplavnik.workers.dev (Cloudflare Workers, Frankfurt-region Supabase behind it).
+  Try `GET /health`, `GET /menu`, `GET /slots?date=YYYY-MM-DD` (Sundays answer `closed`). Deployed by CI from `main`.
+- **Web app:** after M6.
