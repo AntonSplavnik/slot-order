@@ -198,11 +198,12 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** "After M6": wait for CI's deploy from `main` (migrations, API, web), run the production check of
-the whole flow against the live URLs (the web app's pages, a `POST /orders` with a Checkout URL, a webhook event
-replayed from the Stripe dashboard); then `MESSAGE.md` (private, git-ignored; Anton's voice, never "this fixes your
-problem"), the CV entry in `~/Documents/Job/pipeline/profile.yaml` (outside this repo), a last read of the README.
-M7 (POS adapter) only if time is left, spec §16 first.
+**Next action:** Anton merges PR #8 (the CI web deploy step: `run deploy`); CI then deploys the web from `main` for
+the first time (the API and the migrations already deployed from `main` on 2026-11-07, run `79d91c0d`). Production
+check done 2026-11-07 after the merge: API health, menu, validation, every web page 200, CORS for the web origin,
+the webhook replay still a duplicate, the M5 demo order `picked_up` by Anton's phone run. Open with Anton:
+`MESSAGE.md` (drafted, private), the CV entry (proposed, waiting for his go-ahead; the pipeline's rule). M7 only
+if time is left.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -217,6 +218,7 @@ M7 (POS adapter) only if time is left, spec §16 first.
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, after the M6 merge: the first CI run on `main` deployed the migrations and the API and failed at the web step: `pnpm --filter @slot-order/web deploy` is pnpm's built-in `deploy` command, not the package script; `run deploy` (§14, the CI step, the docs). Caught by CI, not by a review; the live web Worker was the hand deploy of the same commit. PR `fix-ci-web-deploy`.
 - 2026-11-07, M6 (Anton's review of PR #7): the screens looked bare; a polish pass (`a269fcf`, screens and components only, behaviour untouched) and the README's first "What the agent got wrong and what I changed" entry. §11.5 records the look; §16 the four small behaviours left out on purpose. In the M6 PR.
 - 2026-11-07, M6 (after the implementer's report): §11.5 added with its decisions: the money format, the cart's repair rule and the 30-line limit, the promo code quoted per exact cart, the day strip's loading rule and defaults, the Pay button's conditions, the status page's extras, the staff board's pickup-by-code and 401 handling, the check-in page's single call, Next 16.4's `agentRules`, the ignored generated files. The implementer could not edit `apps/api/wrangler.toml` (`WEB_ORIGIN`) and the CI deploy step (the sandbox classifier refused them as production changes); the orchestrator applied both as the plan had them. All green: core 373, web 218, API 287, Next build, OpenNext build. In the M6 green commit.
 - 2026-11-07, M6 (after the test agent's report): §11.2 decisions written: `setQuantity` floors a non-integer, a bad index answers an equal cart; saving an empty cart removes the key (`CartSchema` wants a line), saving or clearing into a throwing storage does not throw; `itemById` finds inactive items; the radio replacement's order (old id out, new one appended) and that an optional single-choice group cannot be cleared; a chip without a reason has no hint; `dayLabel` never shows the year; `errorText` wording pinned for five codes, "one sentence" relaxed; a 2xx body that is not JSON is `invalid_response`, a network failure carries the cause's message, an unknown error code is `internal`; the staff token helpers never throw. The brief was wrong three times: the seed's Sauce group is already multi-choice (min 0, max 2), `CartSchema` refuses an empty cart, and its "two-line cart" total (2750 is a large garlic burger ×2 plus three colas). `pnpm -r test` stops at the first failing package. In the M6 red commit.

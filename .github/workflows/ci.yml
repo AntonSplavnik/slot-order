@@ -102,4 +102,4 @@ jobs:
           NEXT_PUBLIC_API_URL: https://slot-order-api.antonsplavnik.workers.dev
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @slot-order/web deploy
+        run: pnpm --filter @slot-order/web run deploy
