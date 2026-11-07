@@ -15,7 +15,8 @@ enabled = true
 crons = ["* * * * *"]
 
 # Production values. `wrangler dev` overrides them with apps/api/.dev.vars (SUPABASE_URL of the local
-# stack); WEB_ORIGIN becomes the web app's address in M6.
+# stack, WEB_ORIGIN = http://localhost:3000 for the local web app). WEB_ORIGIN is the web Worker (§11.3):
+# CORS, and Stripe's success and cancel URLs (§9.1).
 [vars]
-WEB_ORIGIN = "http://localhost:3000"
+WEB_ORIGIN = "https://slot-order-web.antonsplavnik.workers.dev"
 SUPABASE_URL = "https://ckvngajrwdijdtjvfblm.supabase.co"

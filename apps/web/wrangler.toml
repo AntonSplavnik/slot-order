@@ -1,0 +1,16 @@
+# The web Worker (docs/design.md §11.3, §17): the OpenNext build of the Next.js app. It reads no bindings and no
+# secrets; NEXT_PUBLIC_API_URL is baked in at build time (CI sets it to the live API).
+name = "slot-order-web"
+main = ".open-next/worker.js"
+compatibility_date = "2026-11-07"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+upload_source_maps = true
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[observability]
+enabled = true
