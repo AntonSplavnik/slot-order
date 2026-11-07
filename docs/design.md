@@ -814,6 +814,37 @@ client over a stub `fetch` (every method's path, query, headers and body; the sc
 mapping), the QR payload and SVG, the staff token, `apiBaseUrl`. No component tests: the screens are checked in the
 demo (§13 Manual).
 
+### 11.5 Decisions made while building M6
+- Money is shown as "12,90 €" (`Intl.NumberFormat("de-DE", EUR)`) through `formatCents` in `src/lib/money.ts`,
+  everywhere.
+- A `CartError` from local pricing with a `lineIndex` drops that line and prices again (an item vanished from the
+  menu); one without a line empties the cart; the repaired cart is stored. A 31st line (`CartSchema`'s maximum is
+  30) is refused with "Your cart is full.".
+- The promo code lives in the stored cart. While one is set, `POST /quotes` runs on every change of the cart and
+  its receipt is shown only when it was quoted for exactly that cart; `promo_invalid` drops the code and names
+  the error under the field (Apply and Remove buttons).
+- The day strip asks `GET /slots` once per day, all seven at once, again when the item count changes (the newest
+  answer wins; `items` capped at 100, `SlotsQuerySchema`'s maximum); the chosen day defaults to the first open day
+  with a bookable slot; a chosen slot that is no longer bookable after a reload is dropped; non-open days are
+  disabled. Today is read on the client only (no hydration mismatch).
+- **Pay** is enabled with a 1–60 character name, a slot and a receipt. `clearCart` empties the storage only, so the
+  page does not bounce to `/` before the browser leaves for Stripe; a null `checkoutUrl` goes to `/orders/:id`;
+  any 409 clears the slot and reloads the slots.
+- The status page shows the QR, the code, the slot and the name for `paid` and `ready`; `expired` and `cancelled`
+  get a "Back to the menu" link; a failed poll keeps the last order on screen with a note.
+- The staff board's **Picked up** button calls `POST /staff/pickup` with the order's `pickupCode` (there is no
+  pickup-by-id route); a 401 from the board or a button clears the token and shows "The staff token is not
+  valid." on the token form. Status words on the cards: Held, Paid, Ready, Picked up, Expired, Cancelled.
+- The check-in page calls `staffPickup` once per token and code (a ref guards React's development double
+  effect); without a `code` it shows a form that navigates to `?code=`.
+- Next 16.4's `next dev` writes an `AGENTS.md` into the app on every start; `agentRules: false` in
+  `next.config.ts` turns that off. `next-env.d.ts`, `cloudflare-env.d.ts` and `*.tsbuildinfo` are git-ignored.
+- The footer carries a "made-up restaurant, Stripe test mode" note and the Staff link; the accent colour is
+  Tailwind's orange-600.
+- The web `wrangler.toml` also sets `workers_dev = true` and `preview_urls = false`, as the API's does.
+- The web app's `.wrangler/` and `.open-next/` are build output (git-ignored); `pnpm --filter @slot-order/web
+  build` must pass on a clean checkout without `.next/` (CI's typecheck does).
+
 ## 12. Errors
 
 | Code | HTTP | Where |

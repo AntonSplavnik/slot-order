@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **tests written (red)** 2026-11-07: 212 web library tests in 10 files, all red on `not implemented`; the test agent corrected the brief three times (Sauce group, empty cart, a total) | | branch `m6-web`; implementer next |
+| M6 | **implementation green** 2026-11-07: core 373, web 218, API 287, typecheck, check, `next build`, OpenNext build; `WEB_ORIGIN` → the web Worker, CI web deploy step added | | branch `m6-web`; next: Anton deploys the API (new `WEB_ORIGIN`) and the web Worker by hand, the phone demo, PR |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,11 +198,13 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M6 (web), branch `m6-web`: the test agent is writing `apps/web/test/` from
-`docs/handoffs/m6-web-tests.md`. When it reports: review, fold `// SPEC:` points into §11 and the change log, append
-them to `docs/handoffs/m6-web-impl.md`, commit `M6: web library tests (red)`; the implementer (Opus 5.5, high);
-review, green commit; Anton deploys the web Worker by hand (`pnpm --filter @slot-order/web deploy` with
-`NEXT_PUBLIC_API_URL` set) and the API (`WEB_ORIGIN` changed); the phone demo; PR; stop.
+**Next action:** M6 (web), branch `m6-web`: the implementer is building the library and the screens against the red
+suite (commit `ab82f73`). When it reports: read the diff, run `pnpm test`, `pnpm typecheck`, `pnpm check`,
+`pnpm --filter @slot-order/web build`, write its decisions into §11 and the change log, commit `M6: web (green)`;
+then Anton deploys by hand (`! pnpm --filter @slot-order/api exec wrangler deploy` for the new `WEB_ORIGIN`, and
+`! NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm --filter @slot-order/web deploy`);
+the phone demo (menu → options → checkout → slot → test card → QR; second phone: scan → picked up; the error paths);
+PR; stop.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -217,6 +219,7 @@ review, green commit; Anton deploys the web Worker by hand (`pnpm --filter @slot
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M6 (after the implementer's report): §11.5 added with its decisions: the money format, the cart's repair rule and the 30-line limit, the promo code quoted per exact cart, the day strip's loading rule and defaults, the Pay button's conditions, the status page's extras, the staff board's pickup-by-code and 401 handling, the check-in page's single call, Next 16.4's `agentRules`, the ignored generated files. The implementer could not edit `apps/api/wrangler.toml` (`WEB_ORIGIN`) and the CI deploy step (the sandbox classifier refused them as production changes); the orchestrator applied both as the plan had them. All green: core 373, web 218, API 287, Next build, OpenNext build. In the M6 green commit.
 - 2026-11-07, M6 (after the test agent's report): §11.2 decisions written: `setQuantity` floors a non-integer, a bad index answers an equal cart; saving an empty cart removes the key (`CartSchema` wants a line), saving or clearing into a throwing storage does not throw; `itemById` finds inactive items; the radio replacement's order (old id out, new one appended) and that an optional single-choice group cannot be cleared; a chip without a reason has no hint; `dayLabel` never shows the year; `errorText` wording pinned for five codes, "one sentence" relaxed; a 2xx body that is not JSON is `invalid_response`, a network failure carries the cause's message, an unknown error code is `internal`; the staff token helpers never throw. The brief was wrong three times: the seed's Sauce group is already multi-choice (min 0, max 2), `CartSchema` refuses an empty cart, and its "two-line cart" total (2750 is a large garlic burger ×2 plus three colas). `pnpm -r test` stops at the first failing package. In the M6 red commit.
 - 2026-11-07, M6 (contract): §11 rewritten: §11.1 the screens with the sections derived from the data (Food, Drinks, Menus: the menu has no section column), the option sheet rules, the status page's `?paid=1` text, the staff token's 401 handling; §11.2 the library contract (`api.ts` with `ApiClientError`, `cart.ts` with injected storage, `menu.ts`, `options.ts`, `slots.ts`, `status.ts`, `errors.ts`, `qr.ts`, `staffToken.ts`, `config.ts`); §11.3 the configuration (OpenNext files, `NEXT_PUBLIC_API_URL` baked at build time, `WEB_ORIGIN` → the web Worker's URL, `.dev.vars` keeping localhost); §11.4 the tests (unit tests of the library, no component tests); §14 the web deploy step; §17 the OpenNext setup as verified, vinext noted and not taken. In the M6 red commit.
 - 2026-11-07, M5 (after the implementer's report): §9.5 added with its decisions: `invalid_status` from `reserve_for_paid` and a null from `transition(expired → cancelled)` are misses of the re-read rule; a refund due without a payment intent is skipped and logged, the order still cancelled; one `now` per webhook request; events without a usable order id are only recorded; only a `PaymentsError` releases the hold; `url: ""` is no URL; the SubtleCrypto provider per verification; no `canTransition` in the webhook; logs carry messages only; the fake is not bundled. Every check green (core 373, API 287, db 122). In the M5 green commit.

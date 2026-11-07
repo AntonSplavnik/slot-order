@@ -1,6 +1,6 @@
-# The checks on every push to main and every pull request (docs/design.md §14); the deploy jobs
-# arrive in M4 (API, migrations) and M6 (web). Actions are pinned to a release's commit, its tag
-# beside it. A change to Markdown or docs/ alone runs nothing.
+# The checks on every push to main and every pull request (docs/design.md §14), then on main the
+# deploys: the migrations, the API Worker, the web Worker. Actions are pinned to a release's commit, its
+# tag beside it. A change to Markdown or docs/ alone runs nothing.
 name: CI
 
 on:
@@ -62,7 +62,8 @@ jobs:
       - run: pnpm test:db
 
   # On main, once both check jobs pass: the migrations to the cloud project (migrations only; the seed was
-  # applied once by hand, docs/design.md §14), then the API Worker. The web app's deploy arrives in M6.
+  # applied once by hand, docs/design.md §14), then the API Worker, then the web Worker (OpenNext build with
+  # the API's address baked in, §11.3).
   deploy:
     name: Deploy
     needs: [checks, test-db]
@@ -96,3 +97,9 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @slot-order/api exec wrangler deploy
+      - name: Deploy the web Worker
+        env:
+          NEXT_PUBLIC_API_URL: https://slot-order-api.antonsplavnik.workers.dev
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter @slot-order/web deploy
