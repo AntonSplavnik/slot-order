@@ -102,9 +102,9 @@ phone / laptop ── Next.js on Cloudflare (apps/web) ── fetch ──▶ Ho
   `tsconfig` has `types: []`, so any Node API used there fails the typecheck. Depends only on `zod`, `date-fns` and
   `@date-fns/tz`.
 - **`apps/api`** (`@slot-order/api`): the only unit that talks to the database and to Stripe. A `Repository` interface
-  (`src/repo/types.ts`) with a Supabase implementation and an in-memory fake used by the route tests. A `Payments`
-  interface with a Stripe implementation and a fake. Routes stay thin: validate with the `core` schemas, call `core`,
-  call the repository, map errors.
+  (`src/repo/types.ts`, §10.2) with a Supabase implementation and an in-memory fake used by the route tests, both
+  held to one contract test. A `Payments` interface with a Stripe implementation and a fake (M5). Routes stay thin:
+  validate with the `core` schemas, call `core`, call the repository, map errors.
 - **`apps/web`** (`@slot-order/web`): screens only. It imports `core` for the schemas and for pricing the cart locally
   (the server re-prices on order), and calls the API through one small client (`src/lib/api.ts`). `next.config`
   lists `@slot-order/core` in `transpilePackages`.
@@ -490,27 +490,91 @@ again. No refund UI.
 
 ## 10. API (`apps/api`)
 
-JSON everywhere; every request and response shape is a Zod schema in `core/src/schemas/`. Errors are
-`{ error: { code, message } }` (§12). CORS allows `WEB_ORIGIN` (and `http://localhost:3000` in dev). `now` comes from a
-`clock` on the app's environment so tests can set it.
+JSON everywhere; every request and response shape is a Zod schema in `packages/core/src/schemas/api.ts` (§10.1). Errors
+are `{ error: { code, message, lineIndex?, issues? } }` (§12). CORS allows `WEB_ORIGIN` and `http://localhost:3000`.
+`now` comes from the app's dependencies, never from the clock inside a route (§10.3).
 
 | Method, path | Request | Response |
 |---|---|---|
 | `GET /health` | — | `{ ok: true }` |
-| `GET /menu` | — | `Menu`: active items with their groups and options, combos with components, the VAT rates |
-| `GET /slots?date=YYYY-MM-DD` | — | `{ date, status, slots: SlotAvailability[] }` (§6.2). Before listing, the API calls `release_expired_holds()` so availability is fresh between cron runs. |
+| `GET /menu` | — | `PublicMenu`: the `Menu` without its promo codes (customers never see the code list; the browser prices with `promoCodes: []` and asks `POST /quotes` for a code). |
+| `GET /slots?date=YYYY-MM-DD&items=1` | `SlotsQuery` | `SlotsResponse { date, status, slots }` (§6.2 `listSlots` for `items`). Before listing, the API calls `releaseExpiredHolds(now)` so availability is fresh between cron runs. |
 | `POST /quotes` | `Cart` | `Receipt` (pure, nothing stored) |
-| `POST /orders` | `Cart & { slotStart: ISO, customerName }` | `{ order: OrderSummary, checkoutUrl }` |
-| `GET /orders/:id` | — | `OrderSummary`: status, slot, receipt, `pickupCode` only in `paid`/`ready`/`picked_up`, `checkoutUrl` only while `held`, `cancelReason` when cancelled |
-| `POST /webhooks/stripe` | Stripe | `{ received: true }` or `{ duplicate: true }` |
-| `GET /staff/orders?date=` | token | `{ date, slots: { start, label, booked, capacity, orders: StaffOrder[] }[] }` for `paid`, `ready`, `picked_up` (held orders appear only in `booked`) |
-| `POST /staff/orders/:id/ready` | token | `StaffOrder` |
-| `POST /staff/pickup` | token, `{ code }` | `StaffOrder` (`paid` or `ready` → `picked_up`) |
+| `POST /orders` | `CreateOrderRequest` = `Cart & { slotStart, customerName }` | `201 CreateOrderResponse { order: OrderSummary, checkoutUrl }`; `checkoutUrl` is `null` until M5 |
+| `GET /orders/:id` | — | `OrderSummary` |
+| `POST /webhooks/stripe` | Stripe (M5) | `{ received: true }` or `{ duplicate: true }` |
+| `GET /staff/orders?date=` | token; `date` defaults to today | `StaffBoard { date, status, slots: StaffSlot[] }`: every grid slot of the day with `booked`/`capacity` (0 and the configured capacity for a slot without a row) and its orders in `paid`, `ready`, `picked_up` (held orders count in `booked` only) |
+| `POST /staff/orders/:id/ready` | token | `StaffOrder` (`paid → ready`) |
+| `POST /staff/pickup` | token, `PickupRequest { code }` | `StaffOrder` (`paid` or `ready` → `picked_up`); the code is normalised first (§8.3) |
 
-The Worker also exports `scheduled()` for the Cron Trigger (`* * * * *`): §8.3.
+`POST /orders`, in order: validate the body; `getMenu`, `priceCart` (`CartError` → 400 with its code and `lineIndex`);
+`getSettings`; `getSlotUsage` for the slot; `checkSlot(config, slotStart, itemCount, now, booked)` (§6.2, a `SlotError`
+→ 409); a pickup code from 8 random bytes; `placeHold(order, capacityPerSlot, holdExpiry(config, now))`
+(`SlotFullError` → 409 `slot_full`); then (M5) the Checkout Session. The body's own totals, if any, are ignored: the
+server prices.
 
-Environment (`wrangler.toml` vars, secrets by `wrangler secret put`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (secret),
-`STRIPE_SECRET_KEY` (secret), `STRIPE_WEBHOOK_SECRET` (secret), `STAFF_TOKEN` (secret), `WEB_ORIGIN`.
+The Worker also exports `scheduled()` for the Cron Trigger (`* * * * *`): `runCron(deps)` releases the expired holds
+(§8.4 step 1; step 2, the Stripe sessions, arrives in M5) and returns `{ released }`.
+
+### 10.1 Schemas (`packages/core/src/schemas/api.ts`)
+- Instants in JSON are ISO 8601 strings with an offset (`z.iso.datetime({ offset: true })`), always UTC (`…Z`) in
+  responses; a day is a `DayString`.
+- `PublicMenu` = `Menu` without `promoCodes`. `SlotsQuery = { date, items? (1–100, default 1) }`.
+  `SlotAvailabilityDto = { start, label, available, bookable, reason? }`. `SlotsResponse = { date, status, slots }`.
+- `CreateOrderRequest = Cart & { slotStart, customerName (trimmed, 1–60) }`. `CreateOrderResponse = { order, checkoutUrl: string | null }`.
+- `OrderSummary = { id, status, slotStart, slotLabel, customerName, itemCount, receipt, createdAt, pickupCode?,
+  checkoutUrl?, holdExpiresAt?, cancelReason?, paidAt?, readyAt?, pickedUpAt?, expiredAt?, cancelledAt? }`:
+  `pickupCode` only in `paid`, `ready`, `picked_up`; `checkoutUrl` (nullable) and `holdExpiresAt` only in `held`;
+  `cancelReason` only in `cancelled`; each timestamp only once it exists.
+- `StaffOrder = { id, status, pickupCode, customerName, slotStart, slotLabel, lines, itemCount, totalCents, paidAt,
+  readyAt?, pickedUpAt? }`. `StaffSlot = { start, label, booked, capacity, orders }`. `StaffBoard = { date, status, slots }`.
+  `StaffQuery = { date? }`. `PickupRequest = { code (1–20 chars) }`.
+- `ApiError = { error: { code: ApiErrorCode, message, lineIndex?, issues? } }`; `ApiErrorCode` is the union of §12.
+- `slotLabel(config, start)` in core gives `slotLabel` (§6.2's label for any grid instant).
+
+### 10.2 Repository (`apps/api/src/repo/types.ts`)
+The only way routes reach the database. One interface, two implementations: `createSupabaseRepository(client)`
+(`src/repo/supabase.ts`, the service-role `supabase-js` client, rows mapped by `src/db/rows.ts`) and
+`createMemoryRepository({ settings, menu })` (`src/repo/memory.ts`, used by the route tests and the web app's own
+tests). **One contract test runs against both** (`test/repo/contract.ts`: in `pnpm test` against the memory one, in
+`pnpm test:db` against the Supabase one), so the fake cannot drift from the database.
+
+`Order` is the domain shape (camelCase, `Date`s, `null` for absent): `{ id, status, slotStart, customerName, lines,
+receipt, itemCount, totalCents, promoCode, pickupCode, stripeSessionId, stripePaymentIntentId, holdExpiresAt,
+cancelReason, createdAt, paidAt, readyAt, pickedUpAt, expiredAt, cancelledAt }`. `NewOrder` is what `placeHold` takes
+(`slotStart, customerName, lines, receipt, itemCount, totalCents, promoCode, pickupCode`).
+
+| Method | Semantics (the SQL of §5 behind it) |
+|---|---|
+| `getSettings(): SlotConfig` | the `settings` row, mapped |
+| `getMenu(): Menu` | items, groups, options, components, promo codes, `VAT_RATES_DE_2026` |
+| `getSlotUsage(from, to): Booked` | the `slots` rows with `from ≤ starts_at < to`, keyed by instant ms |
+| `placeHold(order, capacity, holdExpiresAt): Order` | `place_hold`; throws `SlotFullError` |
+| `getOrder(id): Order \| null` | by id. `createdAt` is the database's own time (`now()` in `place_hold`), the one timestamp not taken from the app's clock |
+| `findOrderByPickupCode(code): Order \| null` | by the canonical code |
+| `listOrders(from, to): Order[]` | `from ≤ slot_start < to`, any status, by `slot_start` then `created_at` |
+| `transition(id, from, to, at, patch?): Order \| null` | the conditional `UPDATE … WHERE status IN from` setting `status = to` and the matching `*_at = at` (`paid_at`, `ready_at`, `picked_up_at`), plus `patch.stripePaymentIntentId` when given; `null` when no row matched (unknown id or another status). Only for `held → paid`, `paid → ready`, `paid \| ready → picked_up` (§8.2); the caller checks `canTransition` first. |
+| `releaseHold(id, status, reason, now): Order \| null` | `release_hold`; `null` when nothing was released (an all-null row from PostgREST is `null`) |
+| `releaseExpiredHolds(now): Order[]` | `release_expired_holds` |
+| `reserveForPaid(id, capacity, paymentIntentId, now): Order` | `reserve_for_paid`; throws `SlotFullError` or `InvalidStatusError` |
+| `setCheckout(id, sessionId, checkoutUrl): void` (M5) | the Stripe session on a held order |
+| `recordStripeEvent(id, type, orderId): boolean` (M5) | `INSERT`; `false` on a duplicate id |
+| `deleteStripeEvent(id): void` (M5) | after a failed handling (§9.2 step 4) |
+
+`SlotFullError` and `InvalidStatusError` are classes in `types.ts`; the Supabase implementation maps PostgREST's
+`P0001` with message `slot_full` / `invalid_status` to them and rethrows anything else.
+
+### 10.3 The app and its dependencies (`apps/api/src/app.ts`)
+`createApp(deps: AppDeps): Hono` with `AppDeps = { repo: Repository; now: () => Date; staffToken: string; webOrigin:
+string; randomBytes: (n: number) => Uint8Array; payments?: Payments (M5) }`. `src/index.ts` builds them from the Worker
+environment (validated by Zod in `src/env.ts`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
+`WEB_ORIGIN`; the Stripe keys from M5) with `new Date()` and `crypto.getRandomValues`. Tests build them with the
+memory repository, a fixed `now` and deterministic bytes. `runCron(deps)` is the cron's body.
+
+### 10.4 Staff authentication
+`Authorization: Bearer <STAFF_TOKEN>` on every `/staff/*` request, compared in constant time; anything else → 401
+`unauthorized`. CORS preflights (`OPTIONS`) carry no token by design of browsers, so they pass before the check. A
+deliberate simplification (§2, §16).
 
 ## 11. Web (`apps/web`)
 
@@ -531,17 +595,18 @@ No design system beyond Tailwind defaults and one accent colour. No dark mode wo
 
 | Code | HTTP | Where |
 |---|---|---|
-| `validation` | 400 | any body or query that fails its Zod schema (with the issues) |
-| `empty_cart`, `too_many_lines`, `unknown_item`, `item_inactive`, `options_on_combo`, `unknown_option`, `duplicate_option`, `option_count`, `quantity_out_of_range`, `invalid_price` | 400 | `POST /quotes`, `POST /orders` |
-| `promo_invalid` | 400 | same |
+| `validation` | 400 | any body, path or query that fails its Zod schema (`issues` carries Zod's) |
+| `unknown_item`, `item_inactive`, `options_on_combo`, `unknown_option`, `duplicate_option`, `option_count`, `invalid_price` | 400 | `POST /quotes`, `POST /orders` (`empty_cart`, `too_many_lines` and `quantity_out_of_range` exist in `core` but never reach the API: the `Cart` schema refuses those bodies first, as `validation`) |
+| `promo_invalid` | 400 | same (`CartError`s carry `lineIndex` where one line is at fault) |
 | `closed_day`, `too_far`, `slot_not_on_grid`, `slot_past_cutoff`, `slot_too_soon`, `too_many_items` | 409 | `POST /orders` |
 | `slot_full` | 409 | `POST /orders` (from `place_hold`) |
 | `payment_unavailable` | 502 | Stripe failed while creating the session; the hold is released |
 | `order_not_found` | 404 | `GET /orders/:id`, staff routes |
-| `invalid_transition` | 409 | staff routes (e.g. Ready on a `held` order) |
-| `invalid_code` | 404 | `POST /staff/pickup` |
+| `invalid_transition` | 409 | staff routes (e.g. Ready on a `held` order, Picked up on a code whose order is not `paid` or `ready`) |
+| `invalid_code` | 404 | `POST /staff/pickup`: no order has that code, or the text cannot be a code |
 | `unauthorized` | 401 | `/staff/*` without or with a wrong token |
 | `bad_signature` | 400 | webhook |
+| `not_found` | 404 | an unknown route (JSON, like every other error) |
 | `internal` | 500 | anything else; the message never leaks internals |
 
 ## 13. Testing

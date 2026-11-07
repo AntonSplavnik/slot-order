@@ -174,10 +174,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M3 at `demo ok, PR open` (#4); waiting for Anton's review. Anton still has to create a Supabase personal
-access token (supabase.com/dashboard/account/tokens) and run `gh secret set SUPABASE_ACCESS_TOKEN`, which M4's deploy
-job needs for `supabase db push`. After merge: M4 (Hono API) on `m4-api`; its deploy at the end needs Anton's
-Cloudflare account (`wrangler login`).
+**Next action:** M4 — the API tests are committed red (171 route tests + a 38-test repository contract on both
+implementations); the implementer runs from `docs/handoffs/m4-api-impl.md`. When it reports: review, run `test`,
+`test:db`, `typecheck`, `check`, commit "M4: Hono API (green)", then deploy (needs Anton's `wrangler login`), curl demo,
+PR, stop.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -185,13 +185,15 @@ Cloudflare account (`wrangler login`).
 | M0 | **merged** 2026-11-06 | #1 | CI: checks 28 s, Supabase stack 1 min 35 s on the runner; demo verified by Anton |
 | M1 | **merged** 2026-11-06 | #2 | 145 tests green under `TZ=UTC` and `TZ=Europe/Berlin`; host-independent `wallToInstant`; spec §6 corrected in 5 places found by the agents |
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
-| M3 | **demo ok, PR open** 2026-11-06 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
-| M4 | not started | | |
+| M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
+| M4 | **tests written (red)**; implementation running | — | branch `m4-api`; §10 rewritten as the contract (schemas in `core/src/schemas/api.ts`, `Repository` in `apps/api/src/repo/types.ts`, `createApp(deps)`, `runCron`); stubs in place; all three Supabase secrets set |
 | M5 | not started | | |
 | M6 | not started | | |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M4 (after the test agent's report): §10.4 preflights pass without the token; §12 three cart codes never reach the API (the schema refuses first); `createdAt` is database time. The test agent mutation-tested its suite with a throwaway reference implementation (6 planted bugs, all caught). Local stack restarted under the linked project name (`supabase link` changed the container prefix).
+- 2026-11-07, M4 (contract): §10 rewritten: the route table with `201` for orders and `checkoutUrl: null` until M5, §10.1 the response schemas (`PublicMenu` without promo codes, `OrderSummary` with state-dependent fields, `StaffBoard` over every grid slot), §10.2 the `Repository` interface with a contract test over both implementations, §10.3 `AppDeps`, §10.4 staff auth; §12 `not_found` for unknown routes; core exports `slotLabel`.
 - 2026-11-07, M3 (cloud): §14 `supabase db push --remote` (CLI 3 targets the local database without the flag; found when the first push applied nothing); the seed applied once with `--include-seed`; the project ref recorded. RLS verified against the cloud: anon reads `[]`, rpc refused `42501`.
 - 2026-11-06, M3 (after the implementer's report): §5 `reserve_for_paid` updates the order before reserving the slot (same lock order as `release_hold`); `release_slot` raises `invalid_items`; `release_expired_holds` uses `FOR UPDATE SKIP LOCKED` and `<`; extra CHECKs listed; `stripe_events.order_id` has no foreign key; explicit `GRANT … TO service_role`. Harness: PostgREST warmed up after `db reset` (stale connections made a race test flaky back to back).
 - 2026-11-06, M3 (after the test agent's report): `promo_codes.sort`; §5 notes that PostgREST returns a `NULL` row as an all-null object (M4 checks `id === null`).
