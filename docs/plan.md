@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | demo ok (Anton's phone run), **UI polish done** (`a269fcf`) after his review, pushed; waiting for his redeploy, look and merge | #7 | web Worker live; core 373, web 218, API 287; README "What the agent got wrong" has its first entry |
+| M6 | **merged** 2026-11-07 (`648edc6`); Anton ran the whole flow on the phone; his review asked for a less bare UI → the polish pass `a269fcf` and the README's first "What the agent got wrong" entry | #7 | web Worker `slot-order-web.antonsplavnik.workers.dev`; core 373, web 218, API 287, db 122; CI deploys both Workers from `main` |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,11 +198,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** Anton redeploys the web Worker by hand
-(`! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy`), looks at
-the polished screens on the phone, merges PR #7 (CI then deploys both Workers from `main`). After the merge:
-`git checkout main && git pull`, Status → `merged`, a production check of the live web app; then "After M6":
-`MESSAGE.md` (private), the CV entry; M7 only if time is left.
+**Next action:** "After M6": wait for CI's deploy from `main` (migrations, API, web), run the production check of
+the whole flow against the live URLs (the web app's pages, a `POST /orders` with a Checkout URL, a webhook event
+replayed from the Stripe dashboard); then `MESSAGE.md` (private, git-ignored; Anton's voice, never "this fixes your
+problem"), the CV entry in `~/Documents/Job/pipeline/profile.yaml` (outside this repo), a last read of the README.
+M7 (POS adapter) only if time is left, spec §16 first.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|

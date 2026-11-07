@@ -1,22 +1,18 @@
 # Next session
 
-**Written:** 2026-11-07 after the M6 deploy, with PR #7 open for Anton's review. Start the new session with the
-prompt at the end.
+**Written:** 2026-11-07 after the M6 merge. Start the new session with the prompt at the end.
 
 ## State
 - **Merged:** M0 (#1), M1 slots (#2), M2 pricing and orders (#3), M3 Supabase (#4), M4 Hono API (#5), M5 Stripe
   (#6, `73666a1`; CI deployed `main`, green).
-- **M6 on branch `m6-web`, PR #7 open:** `ab82f73` "M6: web library tests (red)", `cf132c1` "M6: web (green)",
-  docs commits after. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database 122,
-  typecheck, Biome, `next build`, the OpenNext build. **Live:** the web Worker
-  `https://slot-order-web.antonsplavnik.workers.dev` (deployed by hand by Anton from the branch) and the API
-  redeployed with `WEB_ORIGIN` = the web Worker (CORS and Stripe's return URLs). The orchestrator's checks passed
-  (every route 200, the live API address baked in, CORS); Anton's phone run of the whole flow is the open item.
-- **Not done:** Anton's review and merge of #7; the README's "What the agent got wrong and what I changed" (still
-  empty: Anton has changed nothing so far; the honest material is what the agents caught in the orchestrator's
-  briefs, listed in `docs/plan.md` "Spec changes to record"); `MESSAGE.md` (private, git-ignored); the production
-  check of the whole flow after the merge; the CV entry (`~/Documents/Job/pipeline/profile.yaml`, outside the
-  repo); M7 (POS mock) only if time is left.
+- **M6 merged** (#7, `648edc6`): the web app on Workers (`https://slot-order-web.antonsplavnik.workers.dev`), the
+  API's `WEB_ORIGIN` pointing at it, the CI deploy step for the web. Anton ran the whole flow on the phone and asked
+  for a less bare UI; the polish pass `a269fcf` answered it and is the README's first "What the agent got wrong and
+  what I changed" entry. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database
+  122, typecheck, Biome, `next build`, the OpenNext build. CI deploys both Workers from `main`.
+- **Not done:** the production check after CI's deploy from `main` (the pages, a `POST /orders` with a Checkout
+  URL, an event replayed from the Stripe dashboard); `MESSAGE.md` (private, git-ignored); the CV entry
+  (`~/Documents/Job/pipeline/profile.yaml`, outside the repo); M7 (POS mock) only if time is left.
 - **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; Worker (API) `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` is baked in by the
@@ -48,11 +44,9 @@ prompt at the end.
    file, wait for CI, **stop for Anton**. After his merge: `git checkout main && git pull`, Status → `merged`.
 7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
 
-## Next action: after Anton's review of PR #7
-If he asks for changes: make them on `m6-web`, push, and add an entry to the README's "What the agent got wrong
-and what I changed" with the commit. After his merge: `git checkout main && git pull`, plan Status → `merged`,
-watch CI deploy both Workers from `main`, check the live web app and API once more. Then the "After M6" list in
-`docs/plan.md`: the README's final sections, `MESSAGE.md`, the production check, the CV entry.
+## Next action: the "After M6" list
+The production check against the live URLs, then `MESSAGE.md` and the CV entry with Anton (his voice; nothing
+names the company in the repo), a last read of the README.
 
 ## After M6
 The README's final sections (the "What the agent got wrong" entries only from Anton's real corrections; the live
@@ -68,6 +62,6 @@ section exists. Only reviewed work is merged; branches and PRs per milestone. Se
 ## Prompt for the new session
 ```
 Read CLAUDE.md, then docs/plan.md (the Status section and "After M6"), then docs/handoffs/next-session.md in full.
-PR #7 (M6, the web app) is open for my review; if it is merged, update the Status table, check the deploys from
-main, and continue with "After M6" as the plan lists it. Update the plan's Status table at every step.
+M0–M6 are merged and deployed. Continue with "After M6" as the plan lists it: the production check, MESSAGE.md
+(ask me for the tone), the CV entry, and stop for my review. Update the plan's Status table at every step.
 ```
