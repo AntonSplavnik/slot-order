@@ -10,11 +10,9 @@
   for a less bare UI; the polish pass `a269fcf` answered it and is the README's first "What the agent got wrong and
   what I changed" entry. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database
   122, typecheck, Biome, `next build`, the OpenNext build. CI deploys both Workers from `main`.
-- **Not done:** PR #8 (the CI web deploy step needed `run deploy`; the first `main` run after the M6 merge failed
-  only there; the live web Worker is the hand deploy of the same commit) waits for Anton's merge, then the first CI
-  web deploy must be checked; `MESSAGE.md` is drafted (private, both languages), Anton edits and sends it; the CV
-  entry is proposed in chat and waits for his go-ahead (`~/Documents/Job/pipeline/profile.yaml`, then
-  `render_cv.py`); M7 (POS mock) only if time is left. The production check after the merge passed.
+- **Not done:** only the check of the first CI web deploy from `main` after PR #8 (`30637ad`, the `run deploy` fix),
+  and Anton sending the LinkedIn note (`MESSAGE.md`, private, drafted in his framing in both languages). The CV
+  entry is skipped (his CV was already sent). M7 (POS mock) only if he asks.
 - **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; Worker (API) `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` is baked in by the
@@ -46,9 +44,10 @@
    file, wait for CI, **stop for Anton**. After his merge: `git checkout main && git pull`, Status → `merged`.
 7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
 
-## Next action: the "After M6" list
-The production check against the live URLs, then `MESSAGE.md` and the CV entry with Anton (his voice; nothing
-names the company in the repo), a last read of the README.
+## Next action: close out
+Confirm the CI web deploy from `main` worked (the Deploy job's "Deploy the web Worker" step, then the live
+pages); keep the plan's Status table current. Nothing else is open unless Anton asks for M7 or for changes after
+the employer's feedback (each of those is an entry for the README's "What the agent got wrong").
 
 ## After M6
 The README's final sections (the "What the agent got wrong" entries only from Anton's real corrections; the live
@@ -64,6 +63,7 @@ section exists. Only reviewed work is merged; branches and PRs per milestone. Se
 ## Prompt for the new session
 ```
 Read CLAUDE.md, then docs/plan.md (the Status section and "After M6"), then docs/handoffs/next-session.md in full.
-M0–M6 are merged and deployed. Continue with "After M6" as the plan lists it: the production check, MESSAGE.md
-(ask me for the tone), the CV entry, and stop for my review. Update the plan's Status table at every step.
+M0–M6 are merged and deployed and the close-out is done unless the hand-off says otherwise. Continue with what I
+ask for (feedback from the employer, M7 if I want it), spec first, tests first, and update the plan's Status table
+at every step.
 ```

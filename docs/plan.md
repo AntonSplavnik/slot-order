@@ -163,8 +163,8 @@ production check, CV.
 - `MESSAGE.md` (repo root, git-ignored like `HANDOFF.md`): the short note to send with the repo (pitch: "I wanted to try your stack on the kind of problem you
   work on"; never "this fixes your problem"). Anton sends it.
 - Production check: the whole phone flow against the live URLs; a webhook event replayed from the Stripe dashboard.
-- CV: add the project to `~/Documents/Job/pipeline/profile.yaml` (`url` = the live web app, `code` = the repo) and
-  re-render. Outside this repo.
+- ~~CV: add the project to `~/Documents/Job/pipeline/profile.yaml` and re-render.~~ Skipped (Anton, 2026-11-07: the CV
+  was already sent).
 
 ### M7: POS adapter (only if time is left, not planned)
 `PosAdapter` interface in `core`, a mock in `api` writing to `pos_log`, called after `paid`; a "POS" column on the staff
@@ -198,12 +198,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** Anton merges PR #8 (the CI web deploy step: `run deploy`); CI then deploys the web from `main` for
-the first time (the API and the migrations already deployed from `main` on 2026-11-07, run `79d91c0d`). Production
-check done 2026-11-07 after the merge: API health, menu, validation, every web page 200, CORS for the web origin,
-the webhook replay still a duplicate, the M5 demo order `picked_up` by Anton's phone run. Open with Anton:
-`MESSAGE.md` (drafted, private), the CV entry (proposed, waiting for his go-ahead; the pipeline's rule). M7 only
-if time is left.
+**Next action:** PR #8 merged 2026-11-07 (`30637ad`): the CI run on `main` deploys the web Worker for the first time;
+check it (the Deploy job's web step, then the live pages). Then the project is complete for its purpose: Anton
+sends the LinkedIn note (`MESSAGE.md`, private, reframed 2026-11-07 as "I decided to practice a bit and built a
+small version of the kind of system you run, with your stack"). The CV entry is **skipped** (Anton's decision
+2026-11-07: his CV was already sent). M7 (POS mock) only if he asks for it; spec §16 first.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
