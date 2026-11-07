@@ -577,6 +577,30 @@ type StripeEvent = {
   - `verifyWebhook` is the real verification (the same function as the Stripe adapter, on an offline `Stripe`
     instance with the fake's secret), so the route tests cover signatures, the tolerance and the subset mapping.
 
+### 9.5 Decisions made while building M5
+- `reserve_for_paid` raising `invalid_status` is a miss of §9.2 step 4 (its conditional update matched no row: the
+  order is no longer `expired`), as is a `null` from `transition(expired → cancelled)`: the order is read again and
+  the rule applied once more; two attempts in all, then step 5.
+- A refund that is due for a session without a payment intent (impossible in `payment` mode; a guard): the order is
+  still `cancelled` with `refunded_slot_full`, the refund is skipped with an error in the log naming the order (an
+  operator's case), the answer is 200. On the retry path (`cancelled`/`refunded_slot_full`) the refund uses the
+  event's payment intent, because the order's own column stays null after a rolled-back `reserve_for_paid`.
+- One `now` per webhook request, read before the body: the signature's tolerance and every timestamp use it.
+- An event without a usable `orderId` is recorded and nothing else, whatever its type; `checkout.session.expired`
+  for an unknown id goes through `release_hold`, which answers `NULL`. Nothing looks an order up by session id.
+- Only a `PaymentsError` from `createCheckout` releases the hold with `stripe_failed`; any other throw (and a
+  failing `setCheckout`) is a 500 that leaves the hold to the cron. If `releaseHold` fails too, 500.
+- A session answered with `url: ""` counts as one without a URL (a `PaymentsError`).
+- `Stripe.createSubtleCryptoProvider()` is created per verification, so nothing touches `crypto.subtle` at the
+  Worker's start.
+- The webhook does not call `canTransition`: it switches on the status it has just read, and the only transitions
+  it takes (`held → paid`, `expired → cancelled`) are in the table of §8.2.
+- Logs carry messages only: the cron names the Stripe call that failed ("Stripe checkout.sessions.expire failed"),
+  not Stripe's reason; a `PaymentsError` reaching `onError` (a failed refund) is logged with its `cause` (a Stripe
+  error object: response metadata, never the key); no body, header, key or secret is logged or returned.
+- The fake is not part of the Worker bundle (`wrangler deploy --dry-run` checked); the bundle carries the Web build
+  (`WebPlatformFunctions`, `FetchHttpClient`, `SubtleCryptoProvider`).
+
 ## 10. API (`apps/api`)
 
 JSON everywhere; every request and response shape is a Zod schema in `packages/core/src/schemas/api.ts` (§10.1). Errors

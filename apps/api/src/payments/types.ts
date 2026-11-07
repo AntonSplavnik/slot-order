@@ -70,7 +70,22 @@ export const RawStripeEventSchema = z.object({
     .optional(),
 });
 
+/** `stripe_events.order_id` is a uuid column (§5): any other `metadata.order_id` names no order of ours. */
+const OrderIdSchema = z.uuid();
+
 /** §9.2 step 2: a verified event reduced to `StripeEvent`. Throws a ZodError without `id` and `type`. */
-export function stripeEventFromRaw(_raw: unknown): StripeEvent {
-  throw new Error("not implemented");
+export function stripeEventFromRaw(raw: unknown): StripeEvent {
+  const { id, type, data } = RawStripeEventSchema.parse(raw);
+  const object = data?.object;
+  const intent = object?.payment_intent;
+  const orderId = OrderIdSchema.safeParse(object?.metadata?.order_id);
+  return {
+    id,
+    type,
+    sessionId: object?.id ?? null,
+    paymentStatus: object?.payment_status ?? null,
+    // A string, or the id of the object Stripe expanded it into (§9.2 step 2).
+    paymentIntentId: typeof intent === "string" ? intent : (intent?.id ?? null),
+    orderId: orderId.success ? orderId.data : null,
+  };
 }

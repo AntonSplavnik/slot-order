@@ -33,7 +33,7 @@ production check, CV.
 | M2 | Core: pricing + VAT + promo + order transitions + tests | Money and rounding errors | The §7.4 receipt printed by a test |
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
-| M5 | **tests written (red)** 2026-11-07: 287 API tests (117 red: webhook 33, orders 11 new, cron 6, fake 17, adapter 28, reduction 20, contract +5) and 122 db tests (3 red); the test agent found `receivedAt` is milliseconds and the brief's race timing wrong | | branch `m5-stripe`; implementer next |
+| M5 | **implementation green** 2026-11-07: core 373, API 287, db 122, Berlin run, typecheck, check; green commit on `m5-stripe` | | next: Stripe test key from Anton, Worker secrets, deploy by hand, demo, PR |
 | M6 | Next.js + Tailwind flow and staff board + QR check-in + deploy | UI and the OpenNext deploy | Phone: order → pay → QR; second phone: scan → picked up |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
@@ -198,10 +198,13 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** M5 (Stripe), branch `m5-stripe`: commit `M5: Stripe tests (red)` (contract, tests, docs), then
-run the implementer (Opus 5.5, xhigh) from `docs/handoffs/m5-stripe-impl.md`; review the diff, run `pnpm test`,
-`pnpm test:db`, `pnpm typecheck`, `pnpm check`, record its decisions in the spec, commit `M5: Stripe (green)`; then
-ask Anton for the Stripe test keys, set the secrets, deploy once by hand, run the demo, open the PR, stop.
+**Next action:** M5 (Stripe), branch `m5-stripe`, implementation green and committed. Stripe setup with Anton: he
+puts `STRIPE_SECRET_KEY=sk_test_…` into `.env` (git-ignored); the orchestrator creates the webhook endpoint
+`https://slot-order-api.antonsplavnik.workers.dev/webhooks/stripe` (events `checkout.session.completed`,
+`checkout.session.expired`) with the Stripe CLI or Anton does it in the dashboard, and the signing secret goes into
+`.env` as `STRIPE_WEBHOOK_SECRET`; `wrangler secret put` ×2 from `.env` without printing; `.dev.vars` for local; a
+deploy by hand from the branch; the demo (test card → `paid`, the replayed event → `{ duplicate: true }`, the cron
+expiring an unpaid hold's session); push, PR, stop for Anton's review.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -216,6 +219,7 @@ ask Anton for the Stripe test keys, set the secrets, deploy once by hand, run th
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M5 (after the implementer's report): §9.5 added with its decisions: `invalid_status` from `reserve_for_paid` and a null from `transition(expired → cancelled)` are misses of the re-read rule; a refund due without a payment intent is skipped and logged, the order still cancelled; one `now` per webhook request; events without a usable order id are only recorded; only a `PaymentsError` releases the hold; `url: ""` is no URL; the SubtleCrypto provider per verification; no `canTransition` in the webhook; logs carry messages only; the fake is not bundled. Every check green (core 373, API 287, db 122). In the M5 green commit.
 - 2026-11-07, M5 (after the test agent's report): §9.2 step 1 `receivedAt` is milliseconds (`now.getTime()`; the draft and the impl brief said seconds, which disables the tolerance check: stripe divides by 1000 itself), a paid session without a payment intent pays the order with a null intent, step 5 answers 500 and a replay after a failed deletion is a duplicate; §9.1 `expires_at` floored to the second; §17 the milliseconds finding. The brief's full-slot race could not run as written (S is `slot_too_soon` once A's 11:00Z hold has run out; the test places A at 10:55Z and runs the cron at 11:06Z). The test agent mutation-tested its suite with a throwaway reference implementation (5 planted bugs, all caught). In the M5 red commit.
 - 2026-11-07, M5 (contract): §9 rewritten: §9.1 line-item names ("2 × Chicken Burger (large, garlic)", the quantity prefix only above one), `expires_at` = now + 31 minutes (Stripe measures its 30-minute minimum on its own clock; §17), an answer without a URL is a failure; §9.2 the webhook in five steps with the `StripeEvent` subset (`orderId` only when a UUID), `receivedAt` from the app's clock, the re-read rule when a conditional update misses, step 5 deleting the event row; §9.3 cancel first, then refund with the idempotency key `refund:<order id>`, and the retry rule for a `cancelled`/`refunded_slot_full` order; §9.4 the `Payments` interface, `PaymentsError`, `BadSignatureError`, `stripeEventFromRaw`, `checkoutSessionParams`, `StripeClient`, the fake's abilities. §5 `orders.checkout_url`; §8.2/§8.4 `runCron` → `{ released, sessionsExpired }`, sessions expired only for orders that have one; §10 `POST /orders` with the Checkout step, `WebhookResponse` in §10.1, `Order.checkoutUrl`, `transition` to `cancelled` from `expired` with `cancelReason`, `reserveForPaid` with a nullable intent in §10.2, `AppDeps.payments` required and the `sk_test_` / `whsec_` prefixes in §10.3; §13 the payments tests; §14 no `nodejs_compat`; §17 the `stripe`-on-Workers research. In the M5 red commit.
 - 2026-11-07, M4 (after the implementer's report): §10.4 decisions: impossible calendar dates → `validation`; `/slots` releases holds on open days only; `setCheckout` stores the session id until M5; `InvalidStatusError` → `internal`; bad env → 500 with names only. Staff auth moved to §10.5.
