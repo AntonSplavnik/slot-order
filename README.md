@@ -51,7 +51,6 @@ curl localhost:8787/menu       # the Goldhahn menu from the local database
 curl "localhost:8787/slots?date=2026-11-09"
 ```
 
-
 ## Tests
 
 ```sh
