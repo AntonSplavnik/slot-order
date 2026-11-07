@@ -5,35 +5,35 @@ import { formatCents } from "@/lib/money";
 
 export function ReceiptView({ receipt }: { receipt: Receipt }) {
   return (
-    <div className="space-y-3 text-sm">
-      <ul className="space-y-1">
+    <div className="space-y-3">
+      <ul className="space-y-2">
         {receipt.lines.map((line, i) => (
           // The receipt's lines have no id; the index is their identity within one receipt.
           // biome-ignore lint/suspicious/noArrayIndexKey: see above
           <li key={i} className="flex justify-between gap-3">
-            <span>
-              {line.quantity} × {line.name}
+            <span className="min-w-0">
+              <span className="tabular-nums">{line.quantity} ×</span> {line.name}
               {line.optionNames.length > 0 && (
-                <span className="text-stone-500"> ({line.optionNames.join(", ")})</span>
+                <span className="block text-sm text-stone-600">{line.optionNames.join(", ")}</span>
               )}
             </span>
-            <span className="tabular-nums">{formatCents(line.lineGrossCents)}</span>
+            <span className="shrink-0 tabular-nums">{formatCents(line.lineGrossCents)}</span>
           </li>
         ))}
       </ul>
       {receipt.discountCents > 0 && (
-        <div className="flex justify-between text-stone-600">
+        <div className="flex justify-between gap-3 text-orange-700">
           <span>Discount{receipt.promoCode === undefined ? "" : ` (${receipt.promoCode})`}</span>
           <span className="tabular-nums">−{formatCents(receipt.discountCents)}</span>
         </div>
       )}
-      <div className="flex justify-between border-t border-stone-200 pt-2 text-base font-semibold">
+      <div className="flex justify-between gap-3 border-t border-stone-200 pt-3 text-lg font-bold">
         <span>Total</span>
         <span className="tabular-nums">{formatCents(receipt.totalCents)}</span>
       </div>
-      <ul className="space-y-0.5 text-xs text-stone-500">
+      <ul className="space-y-0.5 text-sm text-stone-600">
         {receipt.vat.map((vat) => (
-          <li key={vat.rate} className="flex justify-between">
+          <li key={vat.rate} className="flex justify-between gap-3">
             <span>
               incl. {vat.rate} % VAT on {formatCents(vat.grossCents)}
             </span>

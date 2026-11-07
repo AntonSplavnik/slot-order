@@ -4,6 +4,7 @@ import type { StaffBoard, StaffOrder } from "@slot-order/core";
 import { useCallback, useEffect, useState } from "react";
 import { api, berlinToday, messageOf } from "@/components/browser";
 import { TokenForm } from "@/components/TokenForm";
+import { card, secondaryButton, smallPrimaryButton } from "@/components/ui";
 import { useStaffToken } from "@/components/useStaffToken";
 import { ApiClientError } from "@/lib/api";
 import { errorText } from "@/lib/errors";
@@ -27,6 +28,16 @@ function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiClientError && error.code === "unauthorized";
 }
 
+/** The status tag's colours (paid orange, ready green, picked up stone). */
+const STATUS_TAG: Record<StaffOrder["status"], string> = {
+  held: "bg-stone-100 text-stone-600",
+  paid: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
+  ready: "bg-green-50 text-green-700 ring-1 ring-green-200",
+  picked_up: "bg-stone-100 text-stone-500",
+  expired: "bg-stone-100 text-stone-500",
+  cancelled: "bg-red-50 text-red-700",
+};
+
 function OrderCard({
   order,
   busy,
@@ -40,44 +51,42 @@ function OrderCard({
 }) {
   const done = order.status === "picked_up";
   return (
-    <li
-      className={`rounded-xl border bg-white p-3 ${done ? "border-stone-200 opacity-60" : "border-stone-300"}`}
-    >
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-lg font-bold tracking-wider">{order.pickupCode}</span>
+    <li className={`px-4 py-3 ${done ? "opacity-60" : ""}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <span className="font-mono text-lg font-bold tracking-wider">{order.pickupCode}</span>
+          <span className="truncate font-medium">{order.customerName}</span>
+        </div>
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            order.status === "ready" ? "bg-orange-600 text-white" : "bg-stone-100 text-stone-700"
-          }`}
+          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_TAG[order.status]}`}
         >
           {STATUS_TEXT[order.status]}
         </span>
       </div>
-      <p className="font-medium">{order.customerName}</p>
-      <ul className="mt-1 text-sm">
+      <ul className="mt-1 text-sm text-stone-700">
         {order.lines.map((line, i) => (
           // The lines have no id; the index is their identity within one order.
           // biome-ignore lint/suspicious/noArrayIndexKey: see above
           <li key={i}>
-            {line.quantity} × {line.name}
+            <span className="tabular-nums">{line.quantity} ×</span> {line.name}
             {line.optionNames.length > 0 && (
               <span className="text-stone-500"> ({line.optionNames.join(", ")})</span>
             )}
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-stone-500">
+      <p className="mt-1 text-xs text-stone-500 tabular-nums">
         {order.itemCount} {order.itemCount === 1 ? "item" : "items"} ·{" "}
         {formatCents(order.totalCents)}
       </p>
       {(order.status === "paid" || order.status === "ready") && (
-        <div className="mt-2 flex gap-2">
+        <div className="mt-3 flex gap-2">
           {order.status === "paid" && (
             <button
               type="button"
               disabled={busy}
               onClick={onReady}
-              className="flex-1 rounded-lg border border-orange-600 px-3 py-2 text-sm font-semibold text-orange-600 disabled:opacity-50"
+              className={`${smallPrimaryButton} flex-1`}
             >
               Ready
             </button>
@@ -86,7 +95,7 @@ function OrderCard({
             type="button"
             disabled={busy}
             onClick={onPickup}
-            className="flex-1 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className={`${smallPrimaryButton} flex-1`}
           >
             Picked up
           </button>
@@ -144,9 +153,9 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
   const orders = board?.slots.reduce((total, slot) => total + slot.orders.length, 0) ?? 0;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Orders</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="mr-auto text-xl font-semibold">Orders</h1>
         <input
           type="date"
           aria-label="Day"
@@ -154,12 +163,22 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
           onChange={(event) => {
             if (event.target.value !== "") setDate(event.target.value);
           }}
-          className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm"
+          className="min-h-11 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base focus:border-orange-600 focus:ring-2 focus:ring-orange-600/30 focus:outline-none"
         />
+        <button
+          type="button"
+          onClick={() => void load()}
+          className={`${secondaryButton} px-3 py-2 text-sm`}
+        >
+          Refresh
+        </button>
       </div>
 
       {error !== null && (
-        <p role="alert" className="text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
@@ -167,35 +186,52 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
       {board === null ? (
         <p className="text-stone-500">Loading…</p>
       ) : board.status !== "open" && board.slots.length === 0 ? (
-        <p className="text-stone-500">No service on this day.</p>
+        <p className={`${card} px-4 py-6 text-center text-stone-500`}>No service on this day.</p>
       ) : (
         <>
           <p className="text-sm text-stone-500">
             {orders} {orders === 1 ? "order" : "orders"}
           </p>
-          {board.slots.map((slot) => (
-            <section key={slot.start} aria-label={`Slot ${slot.label}`} className="space-y-2">
-              <h2 className="flex items-baseline justify-between border-b border-stone-200 pb-1">
-                <span className="font-semibold tabular-nums">{slot.label}</span>
-                <span className="text-sm text-stone-500 tabular-nums">
-                  {slot.booked}/{slot.capacity}
-                </span>
-              </h2>
-              {slot.orders.length > 0 && (
-                <ul className="space-y-2">
-                  {slot.orders.map((order) => (
-                    <OrderCard
-                      key={order.id}
-                      order={order}
-                      busy={busy === order.id}
-                      onReady={() => void act(order, "ready")}
-                      onPickup={() => void act(order, "pickup")}
-                    />
-                  ))}
-                </ul>
-              )}
-            </section>
-          ))}
+          <div className="space-y-2">
+            {board.slots.map((slot) =>
+              slot.orders.length === 0 ? (
+                <section
+                  key={slot.start}
+                  aria-label={`Slot ${slot.label}`}
+                  className="px-4 py-1 text-sm text-stone-400"
+                >
+                  <h2 className="tabular-nums">
+                    {slot.label} · {slot.booked}/{slot.capacity}
+                  </h2>
+                </section>
+              ) : (
+                <section
+                  key={slot.start}
+                  aria-label={`Slot ${slot.label}`}
+                  className={`${card} overflow-hidden`}
+                >
+                  <h2 className="border-b border-stone-200 bg-stone-50 px-4 py-2 font-semibold tabular-nums">
+                    {slot.label}
+                    <span className="font-normal text-stone-500">
+                      {" "}
+                      · {slot.booked}/{slot.capacity}
+                    </span>
+                  </h2>
+                  <ul className="divide-y divide-stone-100">
+                    {slot.orders.map((order) => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
+                        busy={busy === order.id}
+                        onReady={() => void act(order, "ready")}
+                        onPickup={() => void act(order, "pickup")}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ),
+            )}
+          </div>
         </>
       )}
     </div>

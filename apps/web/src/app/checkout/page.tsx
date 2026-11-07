@@ -5,10 +5,20 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, berlinToday, browserStorage, messageOf } from "@/components/browser";
 import { ReceiptView } from "@/components/ReceiptView";
+import {
+  card,
+  cardHeading,
+  focusRing,
+  linkButton,
+  primaryButton,
+  secondaryButton,
+  textInput,
+} from "@/components/ui";
 import { useCart } from "@/components/useCart";
 import { ApiClientError } from "@/lib/api";
 import { clearCart, itemCount, removeLine, setPromoCode, setQuantity } from "@/lib/cart";
 import { errorText } from "@/lib/errors";
+import { formatCents } from "@/lib/money";
 import { chip, dayLabel, dayStatusText, dayStrip } from "@/lib/slots";
 
 // `/checkout`, slot and pay (docs/design.md §11.1): the lines with steppers, the name, the day strip with each
@@ -120,7 +130,16 @@ export default function CheckoutPage() {
     };
   }, [cart, setCart]);
 
-  if (menuError !== null) return <p className="text-red-700">{menuError}</p>;
+  if (menuError !== null) {
+    return (
+      <p
+        role="alert"
+        className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
+      >
+        {menuError}
+      </p>
+    );
+  }
   if (
     menu === null ||
     cart === null ||
@@ -168,53 +187,62 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="space-y-7">
-      <h1 className="text-2xl font-bold">Checkout</h1>
+    <div className="space-y-5">
+      <h1 className="text-2xl font-bold tracking-tight">Checkout</h1>
 
-      <section aria-labelledby="cart-title" className="space-y-2">
-        <h2 id="cart-title" className="text-lg font-semibold">
+      <section aria-labelledby="cart-title" className={card}>
+        <h2 id="cart-title" className={`${cardHeading} px-4 pt-4 pb-1`}>
           Your order
         </h2>
-        <ul className="divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white">
+        <ul className="divide-y divide-stone-100">
           {cart.lines.map((line, i) => {
             const priced = receipt.lines[i];
             return (
               <li
                 key={`${line.itemId}-${line.optionIds.join(",")}`}
-                className="flex items-center gap-3 px-4 py-3"
+                className="flex items-start gap-3 px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{priced?.name ?? line.itemId}</p>
                   {priced !== undefined && priced.optionNames.length > 0 && (
-                    <p className="text-sm text-stone-500">{priced.optionNames.join(", ")}</p>
+                    <p className="text-sm text-stone-600">{priced.optionNames.join(", ")}</p>
                   )}
                   <button
                     type="button"
                     onClick={() => setCart(removeLine(cart, i))}
-                    className="text-xs text-stone-500 underline"
+                    className={`-ml-1 mt-0.5 rounded-md px-1 py-1.5 text-sm text-stone-500 underline underline-offset-2 hover:text-red-700 ${focusRing}`}
                   >
                     Remove
                   </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="One less"
-                    onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
-                    className="size-8 rounded-full border border-stone-300"
-                  >
-                    −
-                  </button>
-                  <span className="w-5 text-center tabular-nums">{line.quantity}</span>
-                  <button
-                    type="button"
-                    aria-label="One more"
-                    disabled={line.quantity >= 20}
-                    onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
-                    className="size-8 rounded-full border border-stone-300 disabled:text-stone-300"
-                  >
-                    +
-                  </button>
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  {priced !== undefined && (
+                    <span className="font-medium tabular-nums">
+                      {formatCents(priced.lineGrossCents)}
+                    </span>
+                  )}
+                  <div className="flex items-center rounded-full border border-stone-300 bg-white">
+                    <button
+                      type="button"
+                      aria-label="One less"
+                      onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
+                      className={`grid size-11 place-items-center rounded-full text-lg text-stone-700 enabled:hover:bg-stone-100 ${focusRing}`}
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center font-medium tabular-nums">
+                      {line.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="One more"
+                      disabled={line.quantity >= 20}
+                      onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
+                      className={`grid size-11 place-items-center rounded-full text-lg text-stone-700 enabled:hover:bg-stone-100 disabled:text-stone-300 ${focusRing}`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </li>
             );
@@ -222,26 +250,29 @@ export default function CheckoutPage() {
         </ul>
       </section>
 
-      <section aria-labelledby="name-title" className="space-y-2">
-        <h2 id="name-title" className="text-lg font-semibold">
-          Your name
+      <section aria-labelledby="name-title" className={`${card} space-y-2 p-4`}>
+        <h2 className={cardHeading}>
+          <label id="name-title" htmlFor="customer-name">
+            Your name
+          </label>
         </h2>
         <input
+          id="customer-name"
           type="text"
           autoComplete="given-name"
           maxLength={NAME_MAX}
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="For the counter"
-          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2"
+          className={textInput}
         />
       </section>
 
-      <section aria-labelledby="slot-title" className="space-y-3">
-        <h2 id="slot-title" className="text-lg font-semibold">
+      <section aria-labelledby="slot-title" className={`${card} space-y-4 py-4`}>
+        <h2 id="slot-title" className={`${cardHeading} px-4`}>
           Pickup time
         </h2>
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <div className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {dayStrip(today).map((day) => {
             const result = days[day];
             const status = result?.ok === true ? result.slots.status : undefined;
@@ -252,17 +283,18 @@ export default function CheckoutPage() {
                 key={day}
                 type="button"
                 disabled={!open}
+                aria-pressed={active && open}
                 onClick={() => {
                   setSelectedDay(day);
                   setSelectedSlot(null);
                 }}
-                className={`flex min-w-20 shrink-0 flex-col items-center rounded-xl border px-3 py-2 text-sm ${
+                className={`flex min-h-14 min-w-22 shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-2 text-sm transition-colors ${
                   active && open
                     ? "border-orange-600 bg-orange-600 text-white"
-                    : "border-stone-200 bg-white"
-                } disabled:bg-stone-100 disabled:text-stone-400`}
+                    : "border-stone-200 bg-white enabled:hover:border-stone-400"
+                } disabled:border-stone-100 disabled:bg-stone-100 disabled:text-stone-400 ${focusRing}`}
               >
-                <span className="font-medium">{dayLabel(day, today)}</span>
+                <span className="font-medium whitespace-nowrap">{dayLabel(day, today)}</span>
                 <span className="text-xs">
                   {result === undefined ? "…" : status === undefined ? "–" : dayStatusText(status)}
                 </span>
@@ -271,57 +303,62 @@ export default function CheckoutPage() {
           })}
         </div>
 
-        {dayResult === undefined ? (
-          <p className="text-sm text-stone-500">Loading the slots…</p>
-        ) : !dayResult.ok ? (
-          <p className="text-sm text-red-700">{dayResult.error}</p>
-        ) : dayResult.slots.status !== "open" ? (
-          <p className="text-sm text-stone-500">No pickup on this day.</p>
-        ) : dayResult.slots.slots.length === 0 ? (
-          <p className="text-sm text-stone-500">No slots on this day.</p>
-        ) : (
-          <div className="grid grid-cols-4 gap-2">
-            {dayResult.slots.slots.map((slot) => {
-              const view = chip(slot);
-              const active = slot.start === selectedSlot;
-              return (
-                <button
-                  key={slot.start}
-                  type="button"
-                  disabled={view.disabled}
-                  title={view.hint ?? undefined}
-                  onClick={() => setSelectedSlot(slot.start)}
-                  className={`flex flex-col items-center rounded-lg border px-1 py-2 text-sm tabular-nums ${
-                    active
-                      ? "border-orange-600 bg-orange-600 text-white"
-                      : "border-stone-200 bg-white"
-                  } disabled:bg-stone-100 disabled:text-stone-400`}
-                >
-                  <span className="font-medium">{view.label}</span>
-                  {view.hint !== null && (
-                    <span className="text-[10px] leading-tight">{view.hint}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div className="px-4">
+          {dayResult === undefined ? (
+            <p className="text-sm text-stone-500">Loading the slots…</p>
+          ) : !dayResult.ok ? (
+            <p className="text-sm text-red-700">{dayResult.error}</p>
+          ) : dayResult.slots.status !== "open" ? (
+            <p className="text-sm text-stone-500">No pickup on this day.</p>
+          ) : dayResult.slots.slots.length === 0 ? (
+            <p className="text-sm text-stone-500">No slots on this day.</p>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {dayResult.slots.slots.map((slot) => {
+                const view = chip(slot);
+                const active = slot.start === selectedSlot;
+                return (
+                  <button
+                    key={slot.start}
+                    type="button"
+                    disabled={view.disabled}
+                    aria-pressed={active}
+                    title={view.hint ?? undefined}
+                    onClick={() => setSelectedSlot(slot.start)}
+                    className={`flex min-h-11 flex-col items-center justify-center rounded-xl border px-1 py-2 text-sm tabular-nums transition-colors ${
+                      active
+                        ? "border-orange-600 bg-orange-600 text-white"
+                        : "border-stone-200 bg-white enabled:hover:border-orange-600 enabled:hover:text-orange-700"
+                    } disabled:cursor-not-allowed disabled:border-stone-100 disabled:bg-stone-50 disabled:text-stone-400 ${focusRing}`}
+                  >
+                    <span className="font-medium">{view.label}</span>
+                    {view.hint !== null && (
+                      <span className="text-[10px] leading-tight">{view.hint}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
 
-      <section aria-labelledby="promo-title" className="space-y-2">
-        <h2 id="promo-title" className="text-lg font-semibold">
+      <section aria-labelledby="promo-title" className={`${card} space-y-2 p-4`}>
+        <h2 id="promo-title" className={cardHeading}>
           Promo code
         </h2>
         {hasCode ? (
-          <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
-            <span className="font-mono">{cart.promoCode}</span>
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center rounded-full bg-orange-50 px-3 py-1 font-mono text-sm font-medium text-orange-700 ring-1 ring-orange-200">
+              {cart.promoCode}
+            </span>
             <button
               type="button"
               onClick={() => {
                 setPromoInput("");
                 setCart(setPromoCode(cart, ""));
               }}
-              className="text-sm text-stone-500 underline"
+              className={linkButton}
             >
               Remove
             </button>
@@ -337,15 +374,16 @@ export default function CheckoutPage() {
           >
             <input
               type="text"
+              aria-label="Promo code"
               autoCapitalize="characters"
               value={promoInput}
               onChange={(event) => setPromoInput(event.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 uppercase"
+              className={`${textInput} min-w-0 flex-1 uppercase`}
             />
             <button
               type="submit"
               disabled={promoInput.trim() === ""}
-              className="rounded-lg border border-orange-600 px-4 font-medium text-orange-600 disabled:border-stone-300 disabled:text-stone-400"
+              className={`${secondaryButton} shrink-0`}
             >
               Apply
             </button>
@@ -354,38 +392,50 @@ export default function CheckoutPage() {
         {promoError !== null && <p className="text-sm text-red-700">{promoError}</p>}
       </section>
 
-      <section aria-labelledby="receipt-title" className="space-y-2">
-        <h2 id="receipt-title" className="text-lg font-semibold">
+      <section aria-labelledby="receipt-title" className={`${card} space-y-3 p-4`}>
+        <h2 id="receipt-title" className={cardHeading}>
           Receipt
         </h2>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          {shown !== null ? (
-            <ReceiptView receipt={shown} />
-          ) : (
-            <p className="text-sm text-stone-500">{quoteError ?? "Applying the code…"}</p>
-          )}
-        </div>
+        {shown !== null ? (
+          <ReceiptView receipt={shown} />
+        ) : (
+          <p className="text-sm text-stone-500">{quoteError ?? "Applying the code…"}</p>
+        )}
       </section>
 
-      {payError !== null && (
-        <p role="alert" className="text-sm text-red-700">
-          {payError}
-        </p>
-      )}
+      <div className="space-y-3 pt-1">
+        {payError !== null && (
+          <p
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          >
+            {payError}
+          </p>
+        )}
 
-      <button
-        type="button"
-        disabled={!canPay}
-        onClick={() => void pay()}
-        className="w-full rounded-xl bg-orange-600 px-4 py-3 font-semibold text-white disabled:bg-stone-300"
-      >
-        {paying ? "Starting payment…" : "Pay"}
-      </button>
-      {!canPay && !paying && (
-        <p className="text-center text-xs text-stone-500">
-          {!nameValid ? "Enter your name" : selectedSlot === null ? "Choose a pickup time" : ""}
-        </p>
-      )}
+        <button
+          type="button"
+          disabled={!canPay}
+          onClick={() => void pay()}
+          className={`${primaryButton} w-full text-lg`}
+        >
+          {paying ? (
+            "Starting payment…"
+          ) : (
+            <span>
+              Pay
+              {shown !== null && (
+                <span className="tabular-nums"> {formatCents(shown.totalCents)}</span>
+              )}
+            </span>
+          )}
+        </button>
+        {!canPay && !paying && (
+          <p className="text-center text-sm text-stone-500">
+            {!nameValid ? "Enter your name" : selectedSlot === null ? "Choose a pickup time" : ""}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

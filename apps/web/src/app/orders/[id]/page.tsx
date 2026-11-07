@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { api, messageOf } from "@/components/browser";
+import { ClockIcon } from "@/components/icons";
 import { ReceiptView } from "@/components/ReceiptView";
+import { card, primaryButton, secondaryButton } from "@/components/ui";
 import { pickupUrl, qrSvg } from "@/lib/qr";
 import { type StatusTone, shouldPoll, statusView } from "@/lib/status";
 
@@ -14,11 +16,20 @@ import { type StatusTone, shouldPoll, statusView } from "@/lib/status";
 
 const POLL_MS = 3000;
 
+/** The colour of the status card's top band, by tone. */
 const TONE: Record<StatusTone, string> = {
-  waiting: "border-stone-200 bg-white",
-  good: "border-orange-600 bg-orange-50",
-  done: "border-stone-200 bg-white",
-  bad: "border-red-200 bg-red-50",
+  waiting: "bg-stone-100 text-stone-900",
+  good: "bg-orange-600 text-white",
+  done: "bg-stone-100 text-stone-900",
+  bad: "bg-red-50 text-red-700",
+};
+
+/** The body text under the title, by tone (readable on the band's colour). */
+const TONE_BODY: Record<StatusTone, string> = {
+  waiting: "text-stone-600",
+  good: "text-orange-50",
+  done: "text-stone-600",
+  bad: "text-red-700",
 };
 
 function OrderStatus() {
@@ -64,9 +75,14 @@ function OrderStatus() {
     return error === null ? (
       <p className="text-stone-500">Loading your order…</p>
     ) : (
-      <div className="space-y-3">
-        <p className="text-red-700">{error}</p>
-        <Link href="/" className="text-orange-600 underline">
+      <div className="space-y-4">
+        <p
+          role="alert"
+          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
+        >
+          {error}
+        </p>
+        <Link href="/" className={`${secondaryButton} w-full`}>
           Back to the menu
         </Link>
       </div>
@@ -79,59 +95,69 @@ function OrderStatus() {
   const showCode = code !== undefined && (order.status === "paid" || order.status === "ready");
 
   return (
-    <div className="space-y-6">
-      <div className={`rounded-xl border p-4 ${TONE[view.tone]}`}>
-        <h1 className="text-xl font-bold">{title}</h1>
-        {view.body !== "" && <p className="mt-1 text-sm text-stone-600">{view.body}</p>}
+    <div className="space-y-5">
+      <div className={`${card} overflow-hidden`}>
+        <div className={`px-5 py-5 ${TONE[view.tone]}`}>
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          {view.body !== "" && <p className={`mt-1 ${TONE_BODY[view.tone]}`}>{view.body}</p>}
+        </div>
+
         {held && !confirming && order.checkoutUrl != null && (
-          <a
-            href={order.checkoutUrl}
-            className="mt-3 inline-block rounded-xl bg-orange-600 px-4 py-2 font-semibold text-white"
-          >
-            Continue to payment
-          </a>
+          <div className="p-5">
+            <a href={order.checkoutUrl} className={`${primaryButton} w-full`}>
+              Continue to payment
+            </a>
+          </div>
         )}
-        {(order.status === "expired" || order.status === "cancelled") && (
-          <Link href="/" className="mt-3 inline-block text-orange-600 underline">
-            Back to the menu
-          </Link>
+
+        {showCode && (
+          <section aria-label="Pickup code" className="space-y-4 px-5 py-6 text-center">
+            {svg !== null && (
+              <div
+                className="mx-auto w-60 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm"
+                // Our own SVG, made by `qrcode` from the pickup URL (§11.2 `qr.ts`).
+                // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
+                dangerouslySetInnerHTML={{ __html: svg }}
+              />
+            )}
+            <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
+            {order.status === "ready" && (
+              <p className="text-sm text-stone-600">Show this at the counter</p>
+            )}
+            <p className="flex items-center justify-center gap-2 text-stone-600">
+              <ClockIcon className="size-4 shrink-0 text-orange-600" />
+              <span>
+                Pickup at <span className="font-semibold text-stone-900">{order.slotLabel}</span>{" "}
+                for {order.customerName}
+              </span>
+            </p>
+          </section>
+        )}
+
+        {!showCode && order.status !== "held" && (
+          <p className="flex items-center gap-2 px-5 py-4 text-sm text-stone-600">
+            <ClockIcon className="size-4 shrink-0" />
+            <span>
+              Slot {order.slotLabel}, {order.customerName}
+            </span>
+          </p>
         )}
       </div>
 
-      {showCode && (
-        <section aria-label="Pickup code" className="space-y-3 text-center">
-          {svg !== null && (
-            <div
-              className="mx-auto w-56 rounded-xl bg-white p-2"
-              // Our own SVG, made by `qrcode` from the pickup URL (§11.2 `qr.ts`).
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
-              dangerouslySetInnerHTML={{ __html: svg }}
-            />
-          )}
-          <p className="font-mono text-4xl font-bold tracking-[0.2em]">{code}</p>
-          <p className="text-sm text-stone-500">
-            Pickup at <span className="font-semibold text-stone-900">{order.slotLabel}</span> for{" "}
-            {order.customerName}
-          </p>
-        </section>
-      )}
-
-      {!showCode && order.status !== "held" && (
-        <p className="text-sm text-stone-500">
-          Slot {order.slotLabel}, {order.customerName}
-        </p>
-      )}
-
-      <section aria-labelledby="receipt-title" className="space-y-2">
+      <section aria-labelledby="receipt-title" className={`${card} space-y-3 p-5`}>
         <h2 id="receipt-title" className="text-lg font-semibold">
           Receipt
         </h2>
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <ReceiptView receipt={order.receipt} />
-        </div>
+        <ReceiptView receipt={order.receipt} />
       </section>
 
-      {error !== null && <p className="text-xs text-stone-500">{error}</p>}
+      {error !== null && <p className="text-center text-xs text-stone-500">{error}</p>}
+
+      {(order.status === "expired" || order.status === "cancelled") && (
+        <Link href="/" className={`${secondaryButton} w-full`}>
+          Back to the menu
+        </Link>
+      )}
     </div>
   );
 }
