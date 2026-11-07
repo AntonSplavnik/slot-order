@@ -13,6 +13,7 @@ import {
   type VatCategory,
   type VatRates,
 } from "@slot-order/core";
+import type { Order } from "../repo/types";
 
 // The tables' rows as supabase-js returns them (docs/design.md §5): snake_case like the columns,
 // timestamptz as ISO 8601 strings, jsonb parsed. And the pure mapping of §5 Row mapping onto core's types,
@@ -172,6 +173,36 @@ export function slotConfigFromRow(row: SettingsRow): SlotConfig {
     maxDaysAhead: row.max_days_ahead,
     openingHours: row.opening_hours,
   });
+}
+
+/** An `orders` row as the repository's `Order` (§10.2): camelCase, timestamptz as Dates, null kept. */
+export function orderFromRow(row: OrderRow): Order {
+  return {
+    id: row.id,
+    status: row.status,
+    slotStart: new Date(row.slot_start),
+    customerName: row.customer_name,
+    lines: row.lines,
+    receipt: row.receipt,
+    itemCount: row.item_count,
+    totalCents: row.total_cents,
+    promoCode: row.promo_code,
+    pickupCode: row.pickup_code,
+    stripeSessionId: row.stripe_session_id,
+    stripePaymentIntentId: row.stripe_payment_intent_id,
+    holdExpiresAt: dateOrNull(row.hold_expires_at),
+    cancelReason: row.cancel_reason,
+    createdAt: new Date(row.created_at),
+    paidAt: dateOrNull(row.paid_at),
+    readyAt: dateOrNull(row.ready_at),
+    pickedUpAt: dateOrNull(row.picked_up_at),
+    expiredAt: dateOrNull(row.expired_at),
+    cancelledAt: dateOrNull(row.cancelled_at),
+  };
+}
+
+function dateOrNull(timestamp: string | null): Date | null {
+  return timestamp === null ? null : new Date(timestamp);
 }
 
 function bySort<T extends { sort: number }>(rows: readonly T[]): T[] {

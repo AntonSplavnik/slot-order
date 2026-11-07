@@ -571,7 +571,17 @@ environment (validated by Zod in `src/env.ts`: `SUPABASE_URL`, `SUPABASE_SERVICE
 `WEB_ORIGIN`; the Stripe keys from M5) with `new Date()` and `crypto.getRandomValues`. Tests build them with the
 memory repository, a fixed `now` and deterministic bytes. `runCron(deps)` is the cron's body.
 
-### 10.4 Staff authentication
+### 10.4 Decisions made while building M4
+- A `date` that matches `YYYY-MM-DD` but is not a calendar day (`2026-02-30`) → 400 `validation` on `/slots` and
+  `/staff/orders` (core would throw a `RangeError` otherwise).
+- `GET /slots` releases expired holds only for an `open` day (the other statuses list nothing); the staff board does
+  not release holds, the cron does.
+- Until M5 adds the column, `setCheckout` stores only the session id, and a held order's `checkoutUrl` is `null`.
+- An `InvalidStatusError` that reaches a route is 500 `internal` (§12 has no code for it); the M5 webhook handles it
+  itself.
+- Invalid Worker environment variables → 500 `internal`; the log names the variables, never their values.
+
+### 10.5 Staff authentication
 `Authorization: Bearer <STAFF_TOKEN>` on every `/staff/*` request, compared in constant time; anything else → 401
 `unauthorized`. CORS preflights (`OPTIONS`) carry no token by design of browsers, so they pass before the check. A
 deliberate simplification (§2, §16).
