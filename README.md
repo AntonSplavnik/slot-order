@@ -13,7 +13,7 @@ first, AI agents writing against the tests, every milestone reviewed before the 
 ## Architecture in 30 seconds
 
 ```
-browser ── Next.js (M6) ──▶ Hono on Cloudflare Workers (apps/api) ──▶ Supabase Postgres (supabase/)
+browser ── Next.js on Workers (apps/web) ──▶ Hono on Cloudflare Workers (apps/api) ──▶ Supabase Postgres (supabase/)
                               │  every route: validate with a core schema → call core → repository → map
                               ├──▶ Stripe Checkout (test mode) + idempotent webhook
                               └── Cron Trigger every minute: release expired holds, expire their sessions
@@ -27,7 +27,10 @@ browser ── Next.js (M6) ──▶ Hono on Cloudflare Workers (apps/api) ─�
   Postgres: `reserve_slot` is one conditional `UPDATE`, so 50 concurrent callers for the last place get exactly one
   winner.
 - **`supabase/`**: plain SQL migrations (tables with CHECKs, RLS on with no policies, the functions), the seed.
-- **`apps/web`** (M6): the customer flow and the staff board; talks only to the API.
+- **`apps/web`**: Next.js App Router with Tailwind, deployed to Workers with OpenNext. Screens only: the menu with
+  option sheets, checkout with the day strip and slot chips, the status page with the QR code, the staff board and
+  the QR check-in. A small pure library (`src/lib/`, tested) does the cart, the texts and the API client, which
+  validates every answer with the core schemas; the cart is priced locally with `core`.
 
 ## Run it
 
@@ -40,19 +43,19 @@ supabase start                 # local Postgres + PostgREST in Docker
 supabase db reset              # migrations + the Goldhahn seed, from scratch
 cp apps/api/.dev.vars.example apps/api/.dev.vars   # local service-role key from `supabase status`, a STAFF_TOKEN,
                                # Stripe test keys (sk_test_…, and the whsec_ printed by `stripe listen`)
-pnpm dev                       # the API on http://localhost:8787 (and the web app on :3000 from M6)
+cp apps/web/.env.example apps/web/.env.local       # NEXT_PUBLIC_API_URL, the local API
+pnpm dev                       # the API on http://localhost:8787 and the web app on http://localhost:3000
 stripe listen --forward-to localhost:8787/webhooks/stripe   # another terminal: Stripe's events reach the local API
 curl localhost:8787/health     # {"ok":true}
 curl localhost:8787/menu       # the Goldhahn menu from the local database
 curl "localhost:8787/slots?date=2026-11-09"
 ```
 
-_The web app is wired in during M6._
 
 ## Tests
 
 ```sh
-pnpm test        # core (373) and API tests (287: routes, webhook, payments, in-memory repository); no network
+pnpm test        # core (373), web library (218) and API tests (287: routes, webhook, payments); no network
 pnpm --filter @slot-order/core test:berlin   # the core suite again with the process in Berlin time (§6.3)
 pnpm typecheck   # TypeScript, with the Workers runtime types from `wrangler types`
 pnpm check       # Biome lint and format (`pnpm format` fixes)
@@ -91,4 +94,5 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
 
 - **API:** https://slot-order-api.antonsplavnik.workers.dev (Cloudflare Workers, Frankfurt-region Supabase behind it).
   Try `GET /health`, `GET /menu`, `GET /slots?date=YYYY-MM-DD` (Sundays answer `closed`). Deployed by CI from `main`.
-- **Web app:** after M6.
+- **Web app:** https://slot-order-web.antonsplavnik.workers.dev (Next.js on Workers via OpenNext). The customer
+  flow pays with Stripe's test card `4242 4242 4242 4242`; `/staff` asks for the staff token.
