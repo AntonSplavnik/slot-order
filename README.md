@@ -81,7 +81,13 @@ nothing.
 
 Real cases, as they happened. Each entry: what the agent did, why it was wrong, what I changed, the commit.
 
-- _(none yet)_
+- **2026-11-07, M6, PR #7: the web app looked bare.** The first version worked end to end on the phone (menu →
+  options → slot → Stripe test card → QR code → check-in on a second phone), but it was plain lists and
+  default-looking buttons. The spec said "no design system beyond Tailwind defaults and one accent colour", and the
+  agent read that as licence for no design at all. I flagged it in the review ("looks very pure") and asked for a
+  polish pass with the look spelled out: a header with the name and a cart badge, item cards, a real bottom sheet
+  for options, slot chips with states, a card-style status page with the code in large letters, tidier staff cards.
+  Commit `a269fcf`: screens and components only; the library, its 218 tests and every behaviour unchanged.
 
 ## Docs
 

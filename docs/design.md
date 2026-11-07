@@ -842,6 +842,19 @@ demo (§13 Manual).
 - The footer carries a "made-up restaurant, Stripe test mode" note and the Staff link; the accent colour is
   Tailwind's orange-600.
 - The web `wrangler.toml` also sets `workers_dev = true` and `preview_urls = false`, as the API's does.
+- **The polish pass after Anton's review** (the screens looked bare; `docs/handoffs/m6-web-polish.md`): a sticky top
+  bar with the name, "Order ahead, pick up on time" and a cart badge (the menu page portals it into the server
+  layout's slot after mount); item cards with "from" prices for items with options and the components of a combo;
+  the option sheet as a bottom sheet with a backdrop and "Choose one" / "Up to 2" tags; checkout as a stack of
+  cards with a round stepper, day pills, a 4-column grid of slot chips (the hint inside a disabled chip and as its
+  tooltip), an applied promo code as a tag; the status card with a tone-coloured band, the QR in a white box, the
+  code in large monospace letters, "Pickup at <slot> for <name>"; the staff board with one card per slot that has
+  orders (empty slots as one muted line), status tags, and a **Refresh** button that runs the same load as the
+  10-second refresh; the check-in page as one card with a green or red band. Shared class strings live in
+  `src/components/ui.ts`, four inline SVG icons in `src/components/icons.tsx`. Button labels: **Go to checkout**
+  (count and total beside it), **Add — <price>**, **Pay <total>** ("Pay" while a quote is pending). "Show this at
+  the counter" under the code for `ready` only (`paid`'s body says it already). `role="alert"` on error boxes,
+  `aria-pressed` on day pills and chips. Behaviour untouched.
 - The web app's `.wrangler/` and `.open-next/` are build output (git-ignored); `pnpm --filter @slot-order/web
   build` must pass on a clean checkout without `.next/` (CI's typecheck does).
 
@@ -939,6 +952,10 @@ git-ignored; nothing in the committed repo names the company this was written fo
 - Refund UI; order edits; a customer "cancel while held" button.
 - Rate limiting on `POST /orders`; observability beyond Workers logs.
 - German UI; receipts by email.
+- Small UI behaviours left out of the M6 polish pass on purpose (each changes what a screen does): the option
+  sheet closing on Escape and locking the page's scroll; hiding today's slots that have already started (late in
+  the day every past chip says "Already started"); a status word for an open day with no bookable slot left
+  ("Over"); a busy state on the staff board's buttons while a request runs.
 
 ## 17. Research notes
 

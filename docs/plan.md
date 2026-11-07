@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **demo ok (agent checks), PR open** 2026-11-07; the web Worker live at `slot-order-web.antonsplavnik.workers.dev` (deployed by hand by Anton), every route 200, the live API address in the bundle, CORS from the web origin ok; Anton's phone run pending | #7 | core 373, web 218, API 287; the API redeployed with `WEB_ORIGIN` = the web Worker |
+| M6 | demo ok (Anton's phone run), **UI polish done** (`a269fcf`) after his review, pushed; waiting for his redeploy, look and merge | #7 | web Worker live; core 373, web 218, API 287; README "What the agent got wrong" has its first entry |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,12 +198,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** Anton runs the phone demo on https://slot-order-web.antonsplavnik.workers.dev (menu → options →
-checkout → slot → test card → QR; a second phone scans it → "Picked up ✓"; `/staff` with the production staff
-token; the error paths: a Sunday, a full slot, an expired hold) and reviews PR #7; anything he changes is an entry
-for the README's "What the agent got wrong". After his merge: `git checkout main && git pull`, Status → `merged`,
-CI deploys the API and the web from `main` (same code as the hand deploys). Then "After M6": the README's final
-sections, `MESSAGE.md` (private), the production check, the CV entry.
+**Next action:** Anton redeploys the web Worker by hand
+(`! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy`), looks at
+the polished screens on the phone, merges PR #7 (CI then deploys both Workers from `main`). After the merge:
+`git checkout main && git pull`, Status → `merged`, a production check of the live web app; then "After M6":
+`MESSAGE.md` (private), the CV entry; M7 only if time is left.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -218,6 +217,7 @@ sections, `MESSAGE.md` (private), the production check, the CV entry.
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-07, M6 (Anton's review of PR #7): the screens looked bare; a polish pass (`a269fcf`, screens and components only, behaviour untouched) and the README's first "What the agent got wrong and what I changed" entry. §11.5 records the look; §16 the four small behaviours left out on purpose. In the M6 PR.
 - 2026-11-07, M6 (after the implementer's report): §11.5 added with its decisions: the money format, the cart's repair rule and the 30-line limit, the promo code quoted per exact cart, the day strip's loading rule and defaults, the Pay button's conditions, the status page's extras, the staff board's pickup-by-code and 401 handling, the check-in page's single call, Next 16.4's `agentRules`, the ignored generated files. The implementer could not edit `apps/api/wrangler.toml` (`WEB_ORIGIN`) and the CI deploy step (the sandbox classifier refused them as production changes); the orchestrator applied both as the plan had them. All green: core 373, web 218, API 287, Next build, OpenNext build. In the M6 green commit.
 - 2026-11-07, M6 (after the test agent's report): §11.2 decisions written: `setQuantity` floors a non-integer, a bad index answers an equal cart; saving an empty cart removes the key (`CartSchema` wants a line), saving or clearing into a throwing storage does not throw; `itemById` finds inactive items; the radio replacement's order (old id out, new one appended) and that an optional single-choice group cannot be cleared; a chip without a reason has no hint; `dayLabel` never shows the year; `errorText` wording pinned for five codes, "one sentence" relaxed; a 2xx body that is not JSON is `invalid_response`, a network failure carries the cause's message, an unknown error code is `internal`; the staff token helpers never throw. The brief was wrong three times: the seed's Sauce group is already multi-choice (min 0, max 2), `CartSchema` refuses an empty cart, and its "two-line cart" total (2750 is a large garlic burger ×2 plus three colas). `pnpm -r test` stops at the first failing package. In the M6 red commit.
 - 2026-11-07, M6 (contract): §11 rewritten: §11.1 the screens with the sections derived from the data (Food, Drinks, Menus: the menu has no section column), the option sheet rules, the status page's `?paid=1` text, the staff token's 401 handling; §11.2 the library contract (`api.ts` with `ApiClientError`, `cart.ts` with injected storage, `menu.ts`, `options.ts`, `slots.ts`, `status.ts`, `errors.ts`, `qr.ts`, `staffToken.ts`, `config.ts`); §11.3 the configuration (OpenNext files, `NEXT_PUBLIC_API_URL` baked at build time, `WEB_ORIGIN` → the web Worker's URL, `.dev.vars` keeping localhost); §11.4 the tests (unit tests of the library, no component tests); §14 the web deploy step; §17 the OpenNext setup as verified, vinext noted and not taken. In the M6 red commit.
