@@ -10,9 +10,9 @@
   for a less bare UI; the polish pass `a269fcf` answered it and is the README's first "What the agent got wrong and
   what I changed" entry. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database
   122, typecheck, Biome, `next build`, the OpenNext build. CI deploys both Workers from `main`.
-- **Not done:** only the check of the first CI web deploy from `main` after PR #8 (`30637ad`, the `run deploy` fix),
-  and Anton sending the LinkedIn note (`MESSAGE.md`, private, drafted in his framing in both languages). The CV
-  entry is skipped (his CV was already sent). M7 (POS mock) only if he asks.
+- **Not done:** nothing in the repo. CI's deploy of both Workers from `main` is verified (2026-11-07, after PR #8).
+  Anton sends the LinkedIn note (`MESSAGE.md`, private, both languages, in his framing). The CV entry is skipped
+  (his CV was already sent). M7 (POS mock) only if he asks.
 - **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; Worker (API) `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` is baked in by the
@@ -44,10 +44,9 @@
    file, wait for CI, **stop for Anton**. After his merge: `git checkout main && git pull`, Status → `merged`.
 7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
 
-## Next action: close out
-Confirm the CI web deploy from `main` worked (the Deploy job's "Deploy the web Worker" step, then the live
-pages); keep the plan's Status table current. Nothing else is open unless Anton asks for M7 or for changes after
-the employer's feedback (each of those is an entry for the README's "What the agent got wrong").
+## Next action: none open
+The close-out is done. Continue only with what Anton asks for: feedback from the employer (code changes are
+entries for the README's "What the agent got wrong"), or M7 (spec §16 first, tests first).
 
 ## After M6
 The README's final sections (the "What the agent got wrong" entries only from Anton's real corrections; the live

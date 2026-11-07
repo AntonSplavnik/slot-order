@@ -198,11 +198,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** PR #8 merged 2026-11-07 (`30637ad`): the CI run on `main` deploys the web Worker for the first time;
-check it (the Deploy job's web step, then the live pages). Then the project is complete for its purpose: Anton
-sends the LinkedIn note (`MESSAGE.md`, private, reframed 2026-11-07 as "I decided to practice a bit and built a
-small version of the kind of system you run, with your stack"). The CV entry is **skipped** (Anton's decision
-2026-11-07: his CV was already sent). M7 (POS mock) only if he asks for it; spec §16 first.
+**Next action:** none open. 2026-11-07: M0–M6 merged; CI deploys the migrations, the API Worker and the web Worker
+from `main` (verified after PR #8: every job green, the live pages on the CI build, the API healthy). Anton sends
+the LinkedIn note (`MESSAGE.md`, private). The CV entry is skipped (his CV was already sent). M7 (POS mock) only if
+he asks; spec §16 first. Feedback from the employer that changes code is an entry for the README's "What the agent
+got wrong and what I changed".
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
