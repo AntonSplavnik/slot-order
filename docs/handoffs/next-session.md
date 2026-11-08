@@ -1,31 +1,46 @@
 # Next session
 
-**Written:** 2026-11-07 after the M6 merge. Start the new session with the prompt at the end.
+**Written:** 2026-11-08, after design pass 2 was deployed by hand and PR #9 opened. Start the new session with the
+prompt at the end.
 
 ## State
-- **Merged:** M0 (#1), M1 slots (#2), M2 pricing and orders (#3), M3 Supabase (#4), M4 Hono API (#5), M5 Stripe
-  (#6, `73666a1`; CI deployed `main`, green).
-- **M6 merged** (#7, `648edc6`): the web app on Workers (`https://slot-order-web.antonsplavnik.workers.dev`), the
-  API's `WEB_ORIGIN` pointing at it, the CI deploy step for the web. Anton ran the whole flow on the phone and asked
-  for a less bare UI; the polish pass `a269fcf` answered it and is the README's first "What the agent got wrong and
-  what I changed" entry. Every check green: core 373 (also under `TZ=Europe/Berlin`), web 218, API 287, database
-  122, typecheck, Biome, `next build`, the OpenNext build. CI deploys both Workers from `main`.
-- **Not done:** nothing in the repo. CI's deploy of both Workers from `main` is verified (2026-11-07, after PR #8).
-  Anton sends the LinkedIn note (`MESSAGE.md`, private, both languages, in his framing). The CV entry is skipped
-  (his CV was already sent). M7 (POS mock) only if he asks.
+- **Merged and live:** M0–M6 (#1–#7) and the CI fix #8. CI deploys the migrations, the API Worker
+  (`https://slot-order-api.antonsplavnik.workers.dev`) and the web Worker
+  (`https://slot-order-web.antonsplavnik.workers.dev`) from `main`; verified green on 2026-11-07.
+- **PR #9 open, branch `m6-design`:** design pass 2 (`b712312`): Anton's second review set Uber Eats' standardized
+  store layout as the reference, coloured emoji tiles instead of photos (`src/lib/tiles.ts`, 7 tests). CI green on
+  the PR (Checks, Database tests). **The live web Worker already runs this branch** (Anton deployed it by hand,
+  version `e5f134da`) so he can look at it on the phone; after his merge CI redeploys the same code from `main`.
+  Checks: core 373, web 225, API 287, database 122, typecheck, Biome, `next build`, OpenNext build.
+- **README:** two "What the agent got wrong and what I changed" entries (the bare UI → polish `a269fcf`; the look
+  still short of a real ordering app → the reference and `b712312`). The live URLs and the staff-token note are in.
+- **Private files (git-ignored):** `HANDOFF.md` (the brief), `MESSAGE.md` (the LinkedIn note in Anton's framing,
+  English and German, with the demo staff token line; he edits and sends it), `reference/` (23 phone screenshots
+  of a real restaurant's store on Uber Eats: **layout reference only, none of its content may enter the repo**;
+  downscaled copies were in the session scratchpad). Nothing in the repo names the company.
+- **Not done, Anton's:** merge PR #9 after his look; send the LinkedIn note. The CV entry is skipped (his CV was
+  already sent).
+- **Open question (his call):** photos instead of tiles. The orchestrator advised against using the reference
+  restaurant's own photos (the brief's "no Nhas photos" rule, copyright, how it reads to their lead developer);
+  the legitimate route is a dozen free stock photos (Unsplash or Pexels licences) resized to small WebP files,
+  mapped to the seed items, with a `CREDITS.md`; a small follow-up on the same screens if he wants it.
 - **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
-  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; Worker (API) `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
-  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` is baked in by the
-  CI step). Stripe test mode: the webhook endpoint `we_1UZExURpMWMSEzehPxv9ztph`. On the Mac, git-ignored: `.env`
+  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; API Worker `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
+  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` baked in by CI).
+  Stripe test mode: webhook endpoint `we_1UZExURpMWMSEzehPxv9ztph`. On the Mac, git-ignored: `.env`
   (`SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_ID`, `SUPABASE_SERVICE_ROLE_KEY_CLOUD`, `STAFF_TOKEN_PROD`,
   `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`), `apps/api/.dev.vars` (local Supabase, dev `STAFF_TOKEN`, the Stripe
   test key, a placeholder `whsec_`, `WEB_ORIGIN=http://localhost:3000`), `apps/web/.env.local`
   (`NEXT_PUBLIC_API_URL=http://localhost:8787`). Logged in: `supabase`, `wrangler`, `gh`; the Stripe CLI installed.
-  **The agent's sandbox refuses production deploys, and production config edits for subagents** (`supabase db push
-  --remote`, `wrangler deploy`, the OpenNext deploy): Anton runs them with the `!` prefix (one line, `!` first; a
-  leading `NAME=value` does not work, `cd apps/web && NAME=value pnpm run deploy` does).
+  **The agent's sandbox refuses production deploys** (`supabase db push --remote`, `wrangler deploy`, the OpenNext
+  deploy) and refused subagents' edits to production config: Anton runs deploys with the `!` prefix, one line,
+  `!` as the first character, no leading `NAME=value`: `! cd apps/web &&
+  NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy` (web) and
+  `! pnpm --filter @slot-order/api exec wrangler deploy` (API).
 - **Local stack:** `supabase start` running under the linked project name; port 3000 may be held by another project
-  (`language-app`): `next dev --port 3001` plus `wrangler dev --var WEB_ORIGIN:http://localhost:3001` works.
+  (`language-app`): `next dev -p 3001` plus `wrangler dev --var WEB_ORIGIN:http://localhost:3001` works. Screens
+  were rendered headless with a script in the session scratchpad (gone with the session; easy to redo with
+  Chrome's remote debugging at 390×844, stubbing the order and staff answers).
 
 ## How a milestone is run (what worked for M1–M4)
 1. **Contract first** (orchestrator): refine the spec §-sections into exact signatures; write the schemas, types and
@@ -44,15 +59,11 @@
    file, wait for CI, **stop for Anton**. After his merge: `git checkout main && git pull`, Status → `merged`.
 7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
 
-## Next action: none open
-The close-out is done. Continue only with what Anton asks for: feedback from the employer (code changes are
-entries for the README's "What the agent got wrong"), or M7 (spec §16 first, tests first).
-
-## After M6
-The README's final sections (the "What the agent got wrong" entries only from Anton's real corrections; the live
-URLs are in), `MESSAGE.md` (private, git-ignored), the production check of the whole flow against the live URLs
-with a webhook event replayed from the Stripe dashboard, the CV entry. M7 (POS adapter) only if time is left,
-spec §16 first.
+## Next action
+After Anton merges PR #9: `git checkout main && git pull`, delete nothing remote, plan Status → design pass merged,
+confirm CI's deploy of both Workers (`gh run list --branch main`), check the live pages. Then nothing is open
+unless he asks: the stock-photo follow-up, the employer's feedback (code changes are README entries), or M7 (POS
+mock; spec §16 first, tests first).
 
 ## Rules in force
 Subagents on Opus 5.5, xhigh for logic (slots, pricing, SQL, payments, webhook), high for routine. Plan Status at every
@@ -61,8 +72,8 @@ section exists. Only reviewed work is merged; branches and PRs per milestone. Se
 
 ## Prompt for the new session
 ```
-Read CLAUDE.md, then docs/plan.md (the Status section and "After M6"), then docs/handoffs/next-session.md in full.
-M0–M6 are merged and deployed and the close-out is done unless the hand-off says otherwise. Continue with what I
-ask for (feedback from the employer, M7 if I want it), spec first, tests first, and update the plan's Status table
-at every step.
+Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. PR #9 (the
+design pass) is open for my review; if it is merged, update the Status table and check the deploys from main.
+Then continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
+step.
 ```

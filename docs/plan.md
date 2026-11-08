@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 done** 2026-11-08 (`b712312`, branch `m6-design`, PR open next): the Uber-Eats-style store layout with coloured tiles after Anton's second review; core 373, web 225, API 287 | #7 | README has its second "What the agent got wrong" entry |
+| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 on PR #9** (`b712312`, 2026-11-08), deployed by hand for Anton's look, CI green, waiting for his merge | #7, #9 | core 373, web 225, API 287, db 122; README has two "What the agent got wrong" entries |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,11 +198,9 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** open the PR for `m6-design`; Anton redeploys the web by hand
-(`! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy`), looks at
-it on the phone, merges; CI redeploys from `main`. Then the LinkedIn note goes out (`MESSAGE.md`). Open question
-from Anton: photos instead of tiles (the orchestrator advised against the reference restaurant's own photos; free
-stock photos are the legitimate route if he wants the photo look).
+**Next action:** Anton looks at the deployed design pass 2 on the phone and merges PR #9; then `main` is pulled,
+CI's redeploy of both Workers checked, Status → merged. Anton sends the LinkedIn note (`MESSAGE.md`). Open, his
+call: stock photos instead of tiles (not the reference restaurant's photos). M7 only if he asks.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
