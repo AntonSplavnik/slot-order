@@ -15,4 +15,4 @@ or comes from any real restaurant; they stand in for the made-up Goldhahn menu.
 | `water.jpg`          | Water 0.5 l             | Engin Akyurt    | https://www.pexels.com/photo/9996342/   | Pexels License   |
 | `burger-menu.jpg`    | Burger Menu             | Jonathan Borba  | https://www.pexels.com/photo/18713427/  | Pexels License   |
 | `wings-menu.jpg`     | Wings Menu              | Zyn Aly         | https://www.pexels.com/photo/27605381/  | Pexels License   |
-| `cover.jpg`          | Store page cover        | alleksana       | https://www.pexels.com/photo/6107771/   | Pexels License   |
+| `cover.jpg`          | Store page cover        | Gabriel Tovar   | https://www.pexels.com/photo/40070469/  | Pexels License   |

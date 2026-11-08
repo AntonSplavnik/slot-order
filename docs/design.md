@@ -1129,7 +1129,7 @@ The first view of the store page loads about 0.7 MB of images; tiles below the f
 | `water` | a tall glass of water on black | Engin Akyurt, Pexels 9996342 |
 | `burger-menu` | burger, fries and a glass of cola on black | Jonathan Borba, Pexels 18713427 |
 | `wings-menu` | wings on a dark plate with fries at the edge | Zyn Aly, Pexels 27605381 |
-| cover | sliced grilled chicken on black slate | alleksana, Pexels 6107771 |
+| cover | glazed barbecue chicken wings filling a tray (Anton's pick from eight candidates, 2026-11-08; the first cover was sliced grilled chicken on black slate, alleksana, Pexels 6107771) | Gabriel Tovar, Pexels 40070469 |
 
 **Library.** `src/lib/photos.ts` as §11.2: a map from seed ids to `{ src, alt }`, `photoFor` and `coverPhoto`.
 The alt texts describe the picture in a few words (the item's name stands beside the tile, so the tile itself is
@@ -1156,7 +1156,8 @@ name passes).
 Decisions of the pass (the implementer's report): Biome's `lint/performance/noImgElement` is silenced on the two
 `<img>` tags with a `biome-ignore` comment (plain files from `public/`, no image optimiser on the Worker); while the
 cover loads the band shows `bg-ink`, and a tile shows its §11.6 colour until its photo arrives; the cover was
-fetched again at 1284 × 780 (133 KB); `OptionSheet` and the checkout needed no change because both render `Tile`;
+fetched again at 1284 × 780 (133 KB; replaced the same day by Anton's pick, the wings tray, 149 KB, after a subagent built a
+comparison page of eight dark-surface candidates, `reference/photo-mock/cover-candidates/`); `OptionSheet` and the checkout needed no change because both render `Tile`;
 the OpenNext build copies `public/items/*` and the `_headers` rule into `.open-next/assets`. Checks: core 373, web
 238, API 287, typecheck, Biome, both builds. Noted, not of this pass: with the Menus heading just in view the
 active tab still reads Drinks, the scroll-spy's threshold (a section becomes active in the top 45 % of the

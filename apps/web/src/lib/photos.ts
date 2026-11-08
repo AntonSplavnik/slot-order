@@ -33,7 +33,10 @@ export const PHOTOS: Readonly<Record<string, Photo>> = {
   },
 };
 
-const COVER: Photo = { src: "/items/cover.jpg", alt: "Sliced grilled chicken on black slate" };
+const COVER: Photo = {
+  src: "/items/cover.jpg",
+  alt: "Glazed barbecue chicken wings filling a tray",
+};
 
 /** The photo of `itemId`, or undefined for an id without one (an own-property lookup, so `"constructor"` and
  * the like are unknown ids too). */
