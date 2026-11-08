@@ -756,6 +756,10 @@ green for positive tags. No dark mode work. No images.
   `saveCart(storage, cart)` (an empty cart is no `Cart` for the schema, which wants a line: saving one removes the
   key), `clearCart(storage)`; saving or clearing into a throwing storage does not throw (the cart lives on in
   memory). Every function answers a new or equal object; none mutates its input.
+- `photos.ts` (§11.8): `type Photo = { src: string; alt: string }`; `PHOTOS: Readonly<Record<string, Photo>>` keyed by
+  the seed item ids, `src` = `/items/<id>.jpg`, `alt` a short description of the picture (not the item's name);
+  `photoFor(itemId): Photo | undefined` (unknown id → `undefined`, the screens then fall back to `tileFor`);
+  `coverPhoto(): Photo` (`/items/cover.jpg`). Pure data, no I/O.
 - `menu.ts`: `menuSections(menu: PublicMenu): { id: "food" | "drinks" | "menus"; title: string; items: MenuItem[] }[]`
   as §11.1 (titles "Food", "Drinks", "Menus"; sections without items omitted; inactive items hidden);
   `itemById(menu, id): MenuItem | undefined` (a lookup: it finds inactive items too).
@@ -803,7 +807,7 @@ green for positive tags. No dark mode work. No images.
   cache: no ISR). `wrangler.toml`: `name = "slot-order-web"`, `main = ".open-next/worker.js"`, `compatibility_date`,
   `compatibility_flags = ["nodejs_compat"]`, `[assets] directory = ".open-next/assets", binding = "ASSETS"`,
   `upload_source_maps = true`, `[observability] enabled = true`. `public/_headers`: `/_next/static/*` immutable for a
-  year. `postcss.config.mjs` with `@tailwindcss/postcss`; `src/app/globals.css` with `@import "tailwindcss"`.
+  year; `/items/*` (the photos, §11.8, unhashed names) one day. `postcss.config.mjs` with `@tailwindcss/postcss`; `src/app/globals.css` with `@import "tailwindcss"`.
 - The typeface (§11.7) comes through `next/font/google` (`Figtree`, weights 400, 500, 700, `subsets: ["latin"]`,
   `display: "swap"`) in `layout.tsx`: `next build` downloads the files once and self-hosts them under
   `/_next/static` (CI and the OpenNext build have network; no npm package, no runtime request to Google). The
@@ -819,7 +823,8 @@ green for positive tags. No dark mode work. No images.
 ### 11.4 Tests (`apps/web/test/`)
 Unit tests of §11.2, the plan's list made exact: the cart (add and merge, quantities and clamps, remove, the promo
 code, local pricing equal to core's `priceCart`, the persistence round trip, a corrupt or throwing store → empty,
-`itemQuantity` over several option sets of one item), the sections, the option rules, the day strip, chips and labels, the status texts per status and reason, the API
+`itemQuantity` over several option sets of one item), the photos (every seed item mapped, the files present under
+`public/items`, the fallback for an unknown id), the sections, the option rules, the day strip, chips and labels, the status texts per status and reason, the API
 client over a stub `fetch` (every method's path, query, headers and body; the schema parse of answers; each error
 mapping), the QR payload and SVG, the staff token, `apiBaseUrl`. No component tests: the screens are checked in the
 demo (§13 Manual).
@@ -1095,6 +1100,54 @@ comparison and recorded here. Four values are Uber Base's rather than sampled (d
 height follows the reference's proportion rather than its photo. The tile's round button showing the cart
 quantity is the one behaviour-level addition (pure: `itemQuantity`); everything else is style. The brief:
 `docs/handoffs/m6-web-design3.md`.
+
+### 11.8 Photo tiles (Anton's decision, 2026-11-08)
+Anton approved a mock (`reference/photo-mock/index.html`, git-ignored) of the store page with free stock photos in
+the tiles and chose it over the coloured glyph tiles of §11.6. The photos are from Pexels (10) and Unsplash (1),
+under their free licences (commercial use allowed, no attribution required; credited anyway), all on dark
+surfaces under warm low light so the set reads as one. **None of them is the reference restaurant's.** Weak
+matches accepted for now, to be swapped when better ones turn up: ayran is a glass of milk on black (no ayran
+photo on a dark surface exists on either site), the Burger Menu shows a beef burger with fries and cola, the
+Wings Menu has no cola, the coleslaw is lighter than the rest.
+
+**Files.** `apps/web/public/items/<item id>.jpg` for the ten seed items and `apps/web/public/items/cover.jpg`:
+JPEG, the items 600 × 600 (the grid shows them at 194 CSS px, the sheet's hero at 428 × 230, so 600 covers 2×
+and 3× screens well enough), each at most 120 KB; the cover 1284 × 780 (3× of 428 × 260) or, if the source
+has no larger rendition, the 780 × 520 copy, at most 250 KB. `apps/web/public/items/CREDITS.md` lists item,
+photographer, source page and licence. `public/_headers` caches `/items/*` for a day (the names are not hashed).
+The first view of the store page loads about 0.7 MB of images; tiles below the fold load lazily.
+
+| Item id | Photo | Photographer, source |
+|---|---|---|
+| `half-chicken` | grilled chicken halves on a rack over dark slate | Mithul Varshan, Pexels 8408989 |
+| `chicken-burger` | crispy chicken burger on a black plate | Erwin Quintana, Pexels 7963144 |
+| `chicken-wings` | glazed wings with chilies on dark wood | Ahmed Bhutta, Pexels 7230625 |
+| `fries` | herb fries in a white bowl on a dark table | Roman Odintsov, Pexels 5836999 |
+| `coleslaw` | coleslaw in a dark-rimmed bowl | Jonathan Farber, Unsplash J3bbba1mkH8 |
+| `ayran` | a glass of a white drink on black | Alexas Fotos, Pexels 2198626 |
+| `cola` | a glass of cola with ice on near-black | Ron Lach, Pexels 8879617 |
+| `water` | a tall glass of water on black | Engin Akyurt, Pexels 9996342 |
+| `burger-menu` | burger, fries and a glass of cola on black | Jonathan Borba, Pexels 18713427 |
+| `wings-menu` | wings on a dark plate with fries at the edge | Zyn Aly, Pexels 27605381 |
+| cover | sliced grilled chicken on black slate | alleksana, Pexels 6107771 |
+
+**Library.** `src/lib/photos.ts` as §11.2: a map from seed ids to `{ src, alt }`, `photoFor` and `coverPhoto`.
+The alt texts describe the picture in a few words (the item's name stands beside the tile, so the tile itself is
+`aria-hidden` and its `<img>` has `alt=""`; the alt in the map is for other uses and documentation).
+
+**Rendering.** `Tile` (§11.6) keeps its three sizes and its API; when `photoFor(item.id)` finds a photo it renders
+`<img src width height loading="lazy" decoding="async" alt="">` filling the box with `object-cover` (the box keeps
+radius 12 and `overflow-hidden`), else the coloured glyph tile as before (the fallback for any item without a
+photo, e.g. a new menu item). The sheet's hero and the cart line's 72 px tile use the same component, so they
+show the photo too. The store page's cover band (260 high) shows `coverPhoto()` with `object-cover`, a soft
+gradient over it (black at 18 % at the top fading out, 12 % at the bottom) for the controls, the 80 px white mark
+with its amber ring and the round cart button as before; the glyph pattern goes. The cover image loads eagerly
+(`fetchPriority="high"`), the tiles lazily. Everything else of §11.7 is unchanged.
+
+**Tests** (`apps/web/test/photos.test.ts`, §11.4): every seed item id has a photo and no other id is in the map;
+each `src` is `/items/<id>.jpg` and the file exists under `apps/web/public`, is a JPEG and within the size limit;
+the cover likewise; `photoFor` of an unknown id is `undefined`; alt texts are non-empty and differ from the item's
+name. The test reads files with Node's `fs`; the library itself does no I/O.
 
 ## 12. Errors
 
