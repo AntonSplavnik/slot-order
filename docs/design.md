@@ -1189,7 +1189,13 @@ it does not know). The phone opens the printed URL. On a Mac with the applicatio
 allowed) but the API does not until `workerd`, its runtime, is allowed too: the script detects that and prints the
 `socketfilterfw --add … --unblockapp …` command (sudo; once per workerd version, since the path carries it).
 Stripe's test checkout returns to the LAN origin; the webhook still needs `stripe listen` as above. `WEB_PORT`
-and `API_PORT` override the ports. The dev server is not the OpenNext Worker; `pnpm --filter @slot-order/web
+and `API_PORT` override the ports. **Open (2026-11-08):** on Anton's Mac the phone loaded the page on port 3001 but
+never reached the API on 8787 (`/health` did not load on the phone), even after `workerd` was allowed in the
+firewall; from the Mac itself every check passed (chunks for the phone origin, CORS, preflight). Not found yet;
+candidates: the allow list applying only to processes started after the entry (no restart was tried), a second
+firewall or VPN on the phone or the Mac, the Wi-Fi's client isolation for non-standard ports. The alternative that
+avoids the question, proxying `/api/*` through the Next dev server so only Node listens for other devices, was
+proposed and declined for now; the laptop's browser served as the review. The dev server is not the OpenNext Worker; `pnpm --filter @slot-order/web
 preview` runs the real Worker build locally when that matters. Production is deployed only by CI from `main`; a
 hand deploy of a branch to the production Workers is for the rare case where production itself must be checked.
 

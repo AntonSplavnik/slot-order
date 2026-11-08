@@ -1,36 +1,29 @@
 # Next session
 
-**Written:** 2026-11-08, after design pass 3 was committed and pushed on `m6-design` (PR #9). Start the new session
+**Written:** 2026-11-08, after PR #9 (design passes 2 and 3) was merged and CI deployed `main`. Start the new session
 with the prompt at the end.
 
 ## State
-- **Merged and live:** M0–M6 (#1–#7) and the CI fix #8. CI deploys the migrations, the API Worker
-  (`https://slot-order-api.antonsplavnik.workers.dev`) and the web Worker
-  (`https://slot-order-web.antonsplavnik.workers.dev`) from `main`; verified green on 2026-11-08 (the last run on
-  `main` was the `reference/` ignore commit).
-- **PR #9 open, branch `m6-design`:** design pass 2 (`b712312`) and **design pass 3** (`514a81a`, 2026-11-08, after
-  Anton's third review: "structure right, look too simple; match fonts, shapes and colours exactly"). Pass 3 is
-  `docs/design.md` §11.7: tokens measured from the 23 reference screenshots (sampled colours, cap heights, scan
-  lines), Figtree via `next/font/google` as the nearest open typeface to the reference's proprietary one, a named
-  type scale with unitless line-heights in `globals.css` `@theme`, square tiles, 56 px buttons, 36 px pills, the
-  tile's round button showing the cart quantity (`itemQuantity`, 4 tests). Before the implementation Anton
-  installed design skills (`better-accessibility`, `better-layout`, `better-writing`, `better-typography`,
-  `better-colors`, `better-interface`, `emil-design-eng`, `mobile-native`, `break-ui`, `animate`) and asked for
-  the design to be checked with them first; §11.7's review paragraph lists what that changed (the error red,
-  truncation, the sheet's focus management and `inert`, `viewportFit: "cover"`, press feedback, names, labels).
-  Checks: core 373, web 229, API 287, db 122 (CI), typecheck, Biome (now with `css.parser.tailwindDirectives`),
-  `next build`, OpenNext build. The live web Worker still runs pass 2 (Anton's hand deploy `e5f134da`).
+- **Merged and live:** M0–M6 (#1–#7), the CI fix #8 and PR #9 (design passes 2 and 3, `pnpm dev:phone`), merged
+  2026-11-08 as `47f539e` on Anton's "let's deploy it and move on" after a laptop review. CI deployed the migrations,
+  the API Worker (`https://slot-order-api.antonsplavnik.workers.dev`) and the web Worker
+  (`https://slot-order-web.antonsplavnik.workers.dev`) from `main` (run 42482165887, green); the live web root
+  serves pass 3 with the self-hosted Figtree (verified by curl). Pass 3 is `docs/design.md` §11.7: tokens measured
+  from the 23 reference screenshots, Figtree as the nearest open typeface, a named type scale, square tiles, the
+  tile's round button showing the cart quantity (`itemQuantity`), the design-skill review (Anton's skills:
+  `better-*`, `emil-design-eng`, `mobile-native`, …) applied before the implementation.
+- **No PR open.** Branch `m6-design` still exists on the remote (nothing deleted on purpose).
 - **README:** three "What the agent got wrong and what I changed" entries (bare UI → `a269fcf`; the reference →
   `b712312`; measured exactness and the skill review → `514a81a`).
 - **Private files (git-ignored):** `HANDOFF.md` (the brief), `MESSAGE.md` (the LinkedIn note, Anton edits and
   sends it), `reference/uber-eats/` (23 phone screenshots of a real restaurant's store on Uber Eats: type,
   shapes, colours and layout reference only; none of its content, name or photos may enter the repo). Nothing
   committed names the company or the restaurant.
-- **Not done, Anton's:** review pass 3 on the phone over the LAN: `pnpm dev:phone` (§15; it prints the URL for a
-  phone on the same Wi-Fi; `stripe listen --forward-to localhost:8787/webhooks/stripe` for a paid order), then merge
-  PR #9; CI deploys both Workers from `main`. No hand deploy to look at a design any more (Anton's rule,
-  2026-11-08; the agent's sandbox refuses production deploys anyway). Send the LinkedIn note. A phone has to confirm
-  what emulation cannot: the safe-area insets, no tap flash, no zoom on inputs, the sheet's drawer curve.
+- **Phone review, open:** `pnpm dev:phone` (§15) serves the web app on the Mac's LAN address and proxies nothing; on
+  Anton's Mac the phone loaded the page (port 3001) but never reached the API (port 8787), even after `workerd`
+  was allowed in the firewall; every check from the Mac passed. Not solved; §15 lists the candidates and the
+  declined proxy alternative. Anton's `!` prefix cannot run `sudo` (no terminal for the password); such commands
+  go in Terminal.app. Still to send: the LinkedIn note (`MESSAGE.md`).
 - **Open, Anton's call:** stock photos instead of tiles (free licences, small WebP, a `CREDITS.md`); never the
   reference restaurant's photos. §16 notes the reference's always-enabled Add button (validate on submit) as a
   behaviour change for later. M7 (POS mock) only if he asks.
@@ -67,11 +60,10 @@ with the prompt at the end.
    against them, write what they change into the spec before the implementer runs.
 
 ## Next action
-Anton deploys pass 3 by hand and looks at it on the phone. If he asks for changes: a pass-4 §-paragraph in §11.7
-first, then the implementer. After his merge of PR #9: `git checkout main && git pull`, plan Status → merged,
-confirm CI's deploy of both Workers (`gh run list --branch main`), check the live pages. Then nothing is open unless
-he asks: the stock-photo follow-up, the employer's feedback (code changes are README entries), or M7 (POS mock;
-spec §16 first, tests first).
+Nothing is open unless Anton asks. If he does: the stock-photo follow-up (free licences, small WebP, a `CREDITS.md`;
+never the reference restaurant's photos), the phone-review issue (§15), the employer's feedback (code changes are
+README entries), or M7 (POS mock; spec §16 first, tests first). A design pass 4 would go: §11.7 paragraph first, the
+design skills, the implementer, the laptop or phone review, then the merge.
 
 ## Rules in force
 Subagents on Opus 5.5, xhigh for logic (slots, pricing, SQL, payments, webhook), high for routine. Plan Status at every
@@ -81,8 +73,7 @@ milestone. Secrets never printed.
 
 ## Prompt for the new session
 ```
-Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. PR #9 (the
-design passes) is open for my review; if it is merged, update the Status table and check the deploys from main.
-Then continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
+Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. Nothing is open; PR #9
+is merged and deployed. Continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
 step.
 ```
