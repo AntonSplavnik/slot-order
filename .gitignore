@@ -24,3 +24,6 @@ supabase/.branches
 # private: the brief behind this project and the note sent with the link
 HANDOFF.md
 MESSAGE.md
+
+# private: third-party reference screenshots for the UI work, never committed
+reference/
