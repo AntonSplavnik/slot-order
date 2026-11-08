@@ -23,17 +23,19 @@ export function TokenForm({
         }}
       >
         <div className="text-center">
-          <h2 className="text-2xl font-bold">Staff token</h2>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h2 className="text-title">Staff token</h2>
+          <p className="mt-1 text-body-sm text-ink-3">
             Enter the staff token to see the orders and check customers in. It is kept on this
             device.
           </p>
         </div>
         <label className="block">
-          <span className="mb-1.5 block text-sm font-semibold">Staff token</span>
+          <span className="mb-1.5 block text-label">Staff token</span>
           <input
             type="password"
+            name="staff-token"
             autoComplete="current-password"
+            enterKeyHint="go"
             value={token}
             onChange={(event) => setToken(event.target.value)}
             className={textInput}

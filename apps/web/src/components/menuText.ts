@@ -20,7 +20,7 @@ export function describe(menu: PublicMenu, item: MenuItem): string | undefined {
   return item.kind === "combo" ? componentsText(menu, item) : undefined;
 }
 
-/** A cart line's choices by group in the menu's order, like "Size: large · Sauce: garlic". */
+/** A cart line's choices by group in the menu's order, like "Size: large • Sauce: garlic" (§11.7). */
 export function optionSummary(item: MenuItem, optionIds: readonly string[]): string {
   return item.optionGroups
     .map((group) => {
@@ -28,5 +28,5 @@ export function optionSummary(item: MenuItem, optionIds: readonly string[]): str
       return names.length === 0 ? null : `${group.name}: ${names.join(", ")}`;
     })
     .filter((part) => part !== null)
-    .join(" · ");
+    .join(" • ");
 }

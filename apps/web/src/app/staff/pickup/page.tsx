@@ -20,7 +20,7 @@ import { useStaffToken } from "@/components/useStaffToken";
 import { ApiClientError } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 
-// `/staff/pickup?code=`, the check-in (docs/design.md §11.1, §11.6 for the look): the QR code's target. With a token it calls
+// `/staff/pickup?code=`, the check-in (docs/design.md §11.1, §11.6 and §11.7 for the look): the QR code's target. With a token it calls
 // POST /staff/pickup once and shows the order and "Picked up ✓", or the error's text with a retry.
 
 type Result = { ok: true; order: StaffOrder } | { ok: false; error: string };
@@ -38,15 +38,20 @@ function CodeForm() {
             router.push(`/staff/pickup?code=${encodeURIComponent(code.trim())}`);
         }}
       >
-        <h2 className="text-center text-2xl font-bold">Enter the pickup code</h2>
+        <h2 className="text-center text-title">Enter the pickup code</h2>
         <label className="block">
-          <span className="mb-1.5 block text-sm font-semibold">Pickup code</span>
+          <span className="mb-1.5 block text-label">Pickup code</span>
           <input
             type="text"
+            name="code"
             autoCapitalize="characters"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            enterKeyHint="go"
             value={code}
             onChange={(event) => setCode(event.target.value)}
-            className={`${textInput} text-center font-mono text-xl tracking-widest uppercase`}
+            className={`${textInput} text-center text-total tracking-[0.12em] uppercase`}
           />
         </label>
         <button type="submit" disabled={code.trim() === ""} className={`${primaryButton} w-full`}>
@@ -63,14 +68,14 @@ function CodeForm() {
 /** An order's lines, one per row. */
 function Lines({ order }: { order: StaffOrder }) {
   return (
-    <ul className="divide-y divide-neutral-200 text-left text-sm text-neutral-900">
+    <ul className="divide-y divide-line text-left text-body-sm text-ink-2">
       {order.lines.map((line, i) => (
         // The lines have no id; the index is their identity within one order.
         // biome-ignore lint/suspicious/noArrayIndexKey: see above
-        <li key={i} className="py-2">
-          <span className="font-semibold tabular-nums">{line.quantity} ×</span> {line.name}
+        <li key={i} className="py-3">
+          <span className="font-medium text-ink tabular-nums">{line.quantity} ×</span> {line.name}
           {line.optionNames.length > 0 && (
-            <span className="text-neutral-500"> ({line.optionNames.join(", ")})</span>
+            <span className="text-ink-3"> ({line.optionNames.join(", ")})</span>
           )}
         </li>
       ))}
@@ -109,16 +114,19 @@ function Pickup({
   }, [token, code, send]);
 
   if (result === null)
-    return <p className="pt-6 text-center text-neutral-500">Checking in {code}…</p>;
+    return <p className="pt-6 text-center text-body text-ink-3">Checking in {code}…</p>;
   if (!result.ok) {
     return (
       <div className="flex min-h-[55dvh] items-center">
         <div className="w-full space-y-4 text-center">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-red-50 text-3xl font-bold text-red-700">
+          <span
+            aria-hidden="true"
+            className="mx-auto grid size-16 place-items-center rounded-full bg-negative-soft text-title text-negative"
+          >
             !
           </span>
-          <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
-          <p role="alert" className={`${errorBox} text-base font-medium`}>
+          <p className="text-code break-all tabular-nums">{code}</p>
+          <p role="alert" className={errorBox}>
             {result.error}
           </p>
           <button type="button" onClick={() => void send()} className={`${primaryButton} w-full`}>
@@ -137,19 +145,19 @@ function Pickup({
     <div className="flex min-h-[55dvh] items-center">
       <div className="w-full space-y-4">
         <div className="space-y-2 text-center">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-green-700 text-white">
+          <span className="mx-auto grid size-16 place-items-center rounded-full bg-green text-white">
             <CheckIcon className="size-9" />
           </span>
-          <h2 className="text-2xl font-bold">Picked up ✓</h2>
-          <p className="font-mono text-3xl font-bold tracking-widest">{order.pickupCode}</p>
+          <h2 className="text-title">Picked up ✓</h2>
+          <p className="text-code tabular-nums">{order.pickupCode}</p>
         </div>
         <div className={`${card} px-4`}>
-          <p className="flex items-center gap-3 border-b border-neutral-200 py-3">
-            <PersonIcon className="size-5 shrink-0" />
-            <span className="font-semibold">{order.customerName}</span>
+          <p className="flex items-center gap-4 border-b border-line py-4">
+            <PersonIcon className="size-6 shrink-0" />
+            <span className="min-w-0 text-body-strong break-words">{order.customerName}</span>
           </p>
-          <p className="flex items-center gap-3 border-b border-neutral-200 py-3 tabular-nums">
-            <ClockIcon className="size-5 shrink-0" />
+          <p className="flex items-center gap-4 border-b border-line py-4 text-body tabular-nums">
+            <ClockIcon className="size-6 shrink-0" />
             <span>Pickup at {order.slotLabel}</span>
           </p>
           <Lines order={order} />
@@ -174,9 +182,9 @@ function CheckIn() {
 
   return (
     <>
-      <PageHeader title="Check in" back="/staff" />
+      <PageHeader title="Check in" back={{ href: "/staff", label: "Back to the board" }} />
       {token === undefined ? (
-        <p className="pt-4 text-neutral-500">Loading…</p>
+        <p className="pt-4 text-body text-ink-3">Loading…</p>
       ) : token === null ? (
         <TokenForm
           error={formError}
@@ -199,8 +207,8 @@ export default function PickupPage() {
     <Suspense
       fallback={
         <>
-          <PageHeader title="Check in" back="/staff" />
-          <p className="pt-4 text-neutral-500">Loading…</p>
+          <PageHeader title="Check in" back={{ href: "/staff", label: "Back to the board" }} />
+          <p className="pt-4 text-body text-ink-3">Loading…</p>
         </>
       }
     >

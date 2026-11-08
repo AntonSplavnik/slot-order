@@ -8,11 +8,18 @@ import { api, messageOf } from "@/components/browser";
 import { ClockIcon, PersonIcon } from "@/components/icons";
 import { PageHeader } from "@/components/PageHeader";
 import { ReceiptView } from "@/components/ReceiptView";
-import { card, errorBox, primaryButton, secondaryButton, sectionBand } from "@/components/ui";
+import {
+  card,
+  errorBox,
+  primaryButton,
+  secondaryButton,
+  sectionBand,
+  sectionHeading,
+} from "@/components/ui";
 import { pickupUrl, qrSvg } from "@/lib/qr";
 import { shouldPoll, statusView } from "@/lib/status";
 
-// `/orders/[id]`, the status (docs/design.md §11.1, §11.6): polls GET /orders/:id every 3 s while held; the
+// `/orders/[id]`, the status (docs/design.md §11.1, §11.6, §11.7): polls GET /orders/:id every 3 s while held; the
 // headline from `statusView`, a three-step progress line; paid and ready show the QR code of the staff pickup URL
 // (§3 Pickup code) and the code in letters; the slot, the name and the receipt.
 
@@ -40,22 +47,19 @@ function Progress({ status }: { status: OrderSummary["status"] }) {
     <div className="space-y-2">
       <div className="grid grid-cols-3 gap-1.5">
         {STEPS.map((step, i) => (
-          <span
-            key={step}
-            className={`h-1.5 rounded-full ${i < reached ? "bg-neutral-900" : "bg-neutral-200"}`}
-          />
+          <span key={step} className={`h-1 rounded-full ${i < reached ? "bg-ink" : "bg-line"}`} />
         ))}
       </div>
       {off !== undefined ? (
-        <p className="text-sm text-neutral-500">{off}</p>
+        <p className="text-label text-ink-3">{off}</p>
       ) : (
-        <ol className="grid grid-cols-3 text-sm">
+        <ol className="grid grid-cols-3 text-label">
           {STEPS.map((step, i) => (
             <li
               key={step}
               aria-current={i === reached - 1 ? "step" : undefined}
               className={`${i === 1 ? "text-center" : i === 2 ? "text-right" : ""} ${
-                i < reached ? "font-semibold text-neutral-900" : "text-neutral-400"
+                i < reached ? "text-ink" : "text-chevron"
               }`}
             >
               {step}
@@ -70,9 +74,9 @@ function Progress({ status }: { status: OrderSummary["status"] }) {
 /** A detail row: an icon and a line. */
 function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
-    <p className="flex items-center gap-4 border-b border-neutral-200 py-3.5 last:border-b-0">
-      <span className="shrink-0 text-neutral-900">{icon}</span>
-      <span>{children}</span>
+    <p className="flex items-center gap-4 border-b border-line py-4 text-body last:border-b-0">
+      <span className="shrink-0 text-ink">{icon}</span>
+      <span className="min-w-0 break-words">{children}</span>
     </p>
   );
 }
@@ -123,10 +127,10 @@ function OrderStatus() {
       <>
         {header}
         {error === null ? (
-          <p className="pt-4 text-neutral-500">Loading your order…</p>
+          <p className="pt-4 text-body text-ink-3">Loading your order…</p>
         ) : (
           <div className="space-y-4 pt-4">
-            <p role="alert" className={`${errorBox} text-base`}>
+            <p role="alert" className={errorBox}>
               {error}
             </p>
             <Link href="/" className={`${secondaryButton} w-full`}>
@@ -149,8 +153,8 @@ function OrderStatus() {
 
       <div className="space-y-4 pt-4 pb-5">
         <div>
-          <h2 className="text-2xl leading-tight font-bold tracking-tight">{title}</h2>
-          {view.body !== "" && <p className="mt-1 text-neutral-500">{view.body}</p>}
+          <h2 className="text-title">{title}</h2>
+          {view.body !== "" && <p className="mt-1 text-body-sm text-ink-3">{view.body}</p>}
         </div>
         <Progress status={order.status} />
       </div>
@@ -162,10 +166,7 @@ function OrderStatus() {
       )}
 
       {showCode && (
-        <section
-          aria-label="Pickup code"
-          className={`${card} mb-5 space-y-3 px-5 py-6 text-center`}
-        >
+        <section aria-label="Pickup code" className={`${card} mb-5 space-y-3 p-6 text-center`}>
           {svg !== null && (
             <div
               className="mx-auto w-56"
@@ -174,9 +175,9 @@ function OrderStatus() {
               dangerouslySetInnerHTML={{ __html: svg }}
             />
           )}
-          <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
+          <p className="text-code tabular-nums">{code}</p>
           {order.status === "ready" && (
-            <p className="text-sm text-neutral-500">Show this at the counter</p>
+            <p className="text-body-sm text-ink-3">Show this at the counter</p>
           )}
         </section>
       )}
@@ -184,7 +185,7 @@ function OrderStatus() {
       {!held && (
         <div className="mb-2">
           <Detail icon={<ClockIcon className="size-6" />}>
-            Pickup at <span className="font-semibold">{order.slotLabel}</span>
+            Pickup at <span className="font-medium tabular-nums">{order.slotLabel}</span>
           </Detail>
           <Detail icon={<PersonIcon className="size-6" />}>{order.customerName}</Detail>
         </div>
@@ -192,14 +193,14 @@ function OrderStatus() {
 
       <div className={sectionBand} />
 
-      <section aria-labelledby="summary-title" className="space-y-3 py-5">
-        <h2 id="summary-title" className="text-xl font-bold">
+      <section aria-labelledby="summary-title" className="py-4">
+        <h2 id="summary-title" className={`mb-2 ${sectionHeading}`}>
           Order summary
         </h2>
         <ReceiptView receipt={order.receipt} lines />
       </section>
 
-      {error !== null && <p className="pb-3 text-center text-xs text-neutral-500">{error}</p>}
+      {error !== null && <p className="pb-3 text-center text-caption text-ink-3">{error}</p>}
 
       {(order.status === "expired" ||
         order.status === "cancelled" ||
@@ -218,7 +219,7 @@ export default function OrderPage() {
       fallback={
         <>
           <PageHeader title="Your order" />
-          <p className="pt-4 text-neutral-500">Loading your order…</p>
+          <p className="pt-4 text-body text-ink-3">Loading your order…</p>
         </>
       }
     >

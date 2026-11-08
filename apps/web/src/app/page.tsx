@@ -3,23 +3,26 @@
 import type { MenuItem } from "@slot-order/core";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BagIcon, PlusIcon } from "@/components/icons";
 import { describe } from "@/components/menuText";
 import { OptionSheet } from "@/components/OptionSheet";
 import { Tile, tilePositions } from "@/components/Tile";
-import { errorBox, focusRing, greenTag, roundButton } from "@/components/ui";
+import { errorBox, focusRing, greenTag, press, roundButton } from "@/components/ui";
 import { useCart } from "@/components/useCart";
-import { addLine, itemCount } from "@/lib/cart";
+import { addLine, itemCount, itemQuantity } from "@/lib/cart";
 import { menuSections, type SectionId } from "@/lib/menu";
 import { formatCents } from "@/lib/money";
 
-// `/`, the store page (docs/design.md §11.1, §11.6): a cover band, the white card with the name, sticky section
-// tabs with a scroll-spy, each section a two-column grid of item cards, the item sheet, the floating cart pill.
+// `/`, the store page (docs/design.md §11.1, §11.6, §11.7): a cover band, the white card with the name, sticky
+// section tabs with a scroll-spy, each section a two-column grid of item cards (the round button shows the
+// item's quantity in the cart once there is one), the item sheet, the floating cart pill.
 
 /** CartSchema's line limit (§7.1): a new line beyond it is refused. */
 const MAX_LINES = 30;
-/** The compact header's height (h-12) plus the tab bar's (h-12): where a section's top counts as "reached". */
-const STICKY_PX = 96;
+/** The compact header (56) plus the tab bar (44 labels, the 5 px track, 3 px white, the 4 px band = 56): where
+ * a section's top counts as "reached". */
+const STICKY_PX = 112;
 const NOTICE_MS = 2500;
 
 /** The faint pattern of glyphs on the cover band: position, size and tilt of each. */
@@ -28,9 +31,9 @@ const COVER_PATTERN = [
   { glyph: "🍟", at: "left-[30%] top-[58%] rotate-6 text-3xl" },
   { glyph: "🍔", at: "left-[70%] top-[10%] rotate-12 text-3xl" },
   { glyph: "🥤", at: "left-[84%] top-[56%] -rotate-6 text-4xl" },
-  { glyph: "🔥", at: "left-[12%] top-[62%] rotate-12 text-2xl" },
-  { glyph: "🥗", at: "left-[56%] top-[66%] -rotate-12 text-2xl" },
-  { glyph: "🍗", at: "left-[42%] top-[4%] rotate-45 text-2xl" },
+  { glyph: "🔥", at: "left-[12%] top-[62%] rotate-12 text-3xl" },
+  { glyph: "🥗", at: "left-[56%] top-[66%] -rotate-12 text-3xl" },
+  { glyph: "🍗", at: "left-[42%] top-[4%] rotate-45 text-3xl" },
 ] as const;
 
 function CartButton({ count }: { count: number }) {
@@ -38,7 +41,7 @@ function CartButton({ count }: { count: number }) {
     <>
       <BagIcon className="size-5" />
       {count > 0 && (
-        <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-neutral-900 px-1 text-xs font-semibold text-white tabular-nums">
+        <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1 text-caption-strong text-white tabular-nums">
           {count}
         </span>
       )}
@@ -85,7 +88,7 @@ export default function MenuPage() {
     if (name === null) return;
     const observer = new IntersectionObserver(
       ([entry]) => setCompact(entry !== undefined && !entry.isIntersecting),
-      { rootMargin: "-48px 0px 0px 0px" },
+      { rootMargin: "-56px 0px 0px 0px" },
     );
     observer.observe(name);
     return () => observer.disconnect();
@@ -172,17 +175,17 @@ export default function MenuPage() {
       {/* The compact header, once the band has scrolled away. */}
       <div
         aria-hidden={!compact}
-        className={`fixed inset-x-0 top-0 z-30 border-b border-neutral-200 bg-white transition-opacity duration-150 ${
+        className={`fixed inset-x-0 top-0 z-30 bg-white transition-opacity duration-150 ${
           compact ? "opacity-100" : "pointer-events-none invisible opacity-0"
         }`}
       >
-        <p className="mx-auto flex h-12 max-w-md items-center justify-center text-base font-semibold">
+        <p className="mx-auto flex h-14 max-w-md items-center justify-center text-label-lg">
           Goldhahn
         </p>
       </div>
 
       {/* The cover band: a warm gradient, the mark, a faint pattern of the glyphs; no text. */}
-      <div className="relative h-[180px] overflow-hidden bg-linear-to-br from-amber-300 via-orange-400 to-rose-500">
+      <div className="relative h-[260px] overflow-hidden bg-linear-to-br from-amber-300 via-amber-500 to-rose-500">
         <div aria-hidden="true" className="absolute inset-0 opacity-30 select-none">
           {COVER_PATTERN.map((p) => (
             <span key={p.at} className={`absolute ${p.at}`}>
@@ -192,7 +195,7 @@ export default function MenuPage() {
         </div>
         <span
           aria-hidden="true"
-          className="absolute top-[42%] left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-5xl shadow-lg ring-4 ring-amber-200/70"
+          className="absolute top-[45%] left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-5xl shadow-lg ring-4 ring-amber-200/70"
         >
           🐓
         </span>
@@ -203,112 +206,118 @@ export default function MenuPage() {
 
       {/* The white card over the band. */}
       <div className="relative -mt-6 rounded-t-3xl bg-white px-4 pt-5">
-        <h1 ref={nameRef} className="text-2xl font-bold tracking-tight">
+        <h1 ref={nameRef} className="text-title">
           Goldhahn
         </h1>
-        <p className="mt-1 text-sm text-neutral-900">Halal chicken · Pickup only · Berlin</p>
-        <p className="mt-0.5 text-sm text-neutral-500">
-          Pickup slots every 15 min, pay online, show the QR code
+        <p className="mt-1 text-body-sm text-ink">Halal chicken • Pickup only • Berlin</p>
+        <p className="text-body-sm text-ink-3">Order ahead and show the QR code at the counter</p>
+        <p className="mt-2 inline-flex h-6 items-center rounded bg-green-soft px-2 text-label text-green-soft-text">
+          Pay online, pick up on time
         </p>
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-neutral-100 px-3 py-2.5 text-center">
-            <p className="text-sm font-semibold">Pickup</p>
-            <p className="text-xs text-neutral-500">order ahead</p>
+        <div className="mt-4 grid h-18 grid-cols-2 divide-x divide-line rounded-xl border border-line">
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-label text-ink">Pickup only</p>
+            <p className="text-caption text-ink-3">order ahead</p>
           </div>
-          <div className="rounded-xl bg-neutral-100 px-3 py-2.5 text-center">
-            <p className="text-sm font-semibold">Slots</p>
-            <p className="text-xs text-neutral-500">every 15 min</p>
+          <div className="flex flex-col items-center justify-center text-center">
+            <p className="text-label text-ink">Every 15 min</p>
+            <p className="text-caption text-ink-3">pickup slots</p>
           </div>
         </div>
       </div>
 
       {menuError !== null ? (
-        <p role="alert" className={`${errorBox} mx-4 mt-6 text-base`}>
+        <p role="alert" className={`${errorBox} mx-4 mt-6`}>
           {menuError}
         </p>
       ) : menu === null ? (
-        <p className="px-4 pt-8 text-neutral-500">Loading the menu…</p>
+        <p className="px-4 pt-8 text-body text-ink-3">Loading the menu…</p>
       ) : (
         <>
-          <nav
-            aria-label="Menu sections"
-            className="sticky top-12 z-20 mt-4 border-b border-neutral-200 bg-white"
-          >
-            <div className="flex gap-6 overflow-x-auto px-4 [scrollbar-width:none]">
-              {sections.map((section) => {
-                const isActive = section.id === active;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    aria-current={isActive ? "true" : undefined}
-                    onClick={() => jumpTo(section.id)}
-                    className={`relative h-12 shrink-0 text-[15px] font-semibold whitespace-nowrap transition-colors ${
-                      isActive ? "text-neutral-900" : "text-neutral-500 hover:text-neutral-900"
-                    } ${focusRing}`}
-                  >
-                    {section.title}
-                    <span
-                      aria-hidden="true"
-                      className={`absolute inset-x-0 bottom-0 h-[3px] rounded-full ${
-                        isActive ? "bg-neutral-900" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
-                );
-              })}
+          <nav aria-label="Menu sections" className="sticky top-14 z-20 mt-4 bg-white">
+            <div className="overflow-x-auto [scrollbar-width:none]">
+              <div className="flex w-max min-w-full px-4 shadow-[inset_0_-5px_0_var(--color-line)]">
+                {sections.map((section) => {
+                  const isActive = section.id === active;
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      aria-current={isActive ? "true" : undefined}
+                      onClick={() => jumpTo(section.id)}
+                      className={`relative h-[49px] shrink-0 px-4 pb-[5px] text-label whitespace-nowrap ${
+                        isActive ? "text-ink" : "text-ink-3 hover:text-ink"
+                      } ${focusRing}`}
+                    >
+                      {section.title}
+                      <span
+                        aria-hidden="true"
+                        className={`absolute inset-x-0 bottom-0 h-[5px] ${
+                          isActive ? "bg-ink" : "bg-transparent"
+                        }`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+            <div aria-hidden="true" className="mt-[3px] h-1 bg-line-2" />
           </nav>
 
-          <div className="space-y-8 px-4 pt-5">
+          <div className="px-4 pb-6">
             {sections.map((section) => (
               <section
                 key={section.id}
                 id={`section-${section.id}`}
                 aria-labelledby={`heading-${section.id}`}
-                className="scroll-mt-28"
+                className="scroll-mt-28 pt-6"
               >
-                <h2 id={`heading-${section.id}`} className="mb-3 text-xl font-bold">
+                <h2 id={`heading-${section.id}`} className="mb-4 text-heading">
                   {section.title}
                 </h2>
-                <ul className="grid grid-cols-2 gap-x-3 gap-y-6">
+                <ul className="grid grid-cols-2 gap-x-2 gap-y-5">
                   {section.items.map((item) => {
                     const description = describe(menu, item);
+                    const inCart = cart === null ? 0 : itemQuantity(cart, item.id);
+                    const action =
+                      item.optionGroups.length > 0
+                        ? `Choose options for ${item.name}`
+                        : `Add ${item.name} to cart`;
                     return (
                       <li key={item.id} className="relative">
                         <button
                           type="button"
                           onClick={() => setSheet(item)}
-                          className={`block w-full rounded-xl text-left ${focusRing}`}
+                          className={`block w-full rounded-xl text-left ${press} ${focusRing}`}
                         >
                           <Tile item={item} index={positions.get(item.id) ?? 0} size="grid" />
-                          <span className="mt-2 line-clamp-2 block leading-snug font-semibold">
+                          <span className="mt-2 line-clamp-2 block text-body-strong">
                             {item.name}
                           </span>
-                          <span className="mt-0.5 block text-sm tabular-nums">
+                          <span className="block text-body-sm text-ink tabular-nums">
                             {formatCents(item.priceCents)}
                           </span>
                           {description !== undefined && (
-                            <span className="mt-0.5 line-clamp-2 block text-sm text-neutral-500">
+                            <span className="line-clamp-2 block text-body-sm text-ink-3">
                               {description}
                             </span>
                           )}
                           {item.kind === "combo" && (
-                            <span className={`mt-1.5 inline-block ${greenTag}`}>Popular</span>
+                            <span className={`mt-2 ${greenTag}`}>Popular</span>
                           )}
                         </button>
-                        <div className="pointer-events-none absolute inset-x-0 top-0 aspect-[4/3]">
+                        <div className="pointer-events-none absolute inset-x-0 top-0 aspect-square">
                           <button
                             type="button"
-                            aria-label={
-                              item.optionGroups.length > 0
-                                ? `Choose options for ${item.name}`
-                                : `Add ${item.name} to cart`
-                            }
+                            aria-label={inCart > 0 ? `${inCart} in cart. ${action}` : action}
                             onClick={() => quickAdd(item)}
                             className={`pointer-events-auto absolute right-2 bottom-2 size-9 ${roundButton}`}
                           >
-                            <PlusIcon className="size-5" />
+                            {inCart > 0 ? (
+                              <span className="text-body-strong tabular-nums">{inCart}</span>
+                            ) : (
+                              <PlusIcon className="size-5" />
+                            )}
                           </button>
                         </div>
                       </li>
@@ -321,26 +330,29 @@ export default function MenuPage() {
         </>
       )}
 
-      {notice !== null && (
-        <p
-          key={notice.key}
-          role="status"
-          className={`fixed left-1/2 z-50 -translate-x-1/2 animate-[fade-in_0.2s_ease-out] rounded-lg bg-neutral-800 px-4 py-2.5 text-sm whitespace-nowrap text-white shadow-lg ${
-            sheet !== null ? "top-4" : showPill ? "bottom-24" : "bottom-6"
-          }`}
-        >
-          {notice.text}
-        </p>
-      )}
+      {notice !== null &&
+        // Into the body, beside the sheet, so it is not inside the page the open sheet makes inert.
+        createPortal(
+          <p
+            key={notice.key}
+            role="status"
+            className={`fixed left-1/2 z-50 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 animate-fade-in rounded-lg bg-ink px-4 py-3 text-center text-label text-white ${
+              sheet !== null ? "top-4" : showPill ? "bottom-24" : "bottom-6"
+            }`}
+          >
+            {notice.text}
+          </p>,
+          document.body,
+        )}
 
       {showPill && sheet === null && (
         <Link
           href="/checkout"
-          className={`fixed bottom-[max(1.25rem,env(safe-area-inset-bottom))] left-1/2 z-20 inline-flex h-13 -translate-x-1/2 items-center gap-2.5 rounded-full bg-neutral-900 px-6 font-semibold whitespace-nowrap text-white shadow-[0_6px_20px_rgba(0,0,0,0.25)] transition-colors hover:bg-neutral-800 ${focusRing}`}
+          className={`fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))] left-1/2 z-20 inline-flex h-14 -translate-x-1/2 items-center gap-2.5 rounded-full bg-ink px-6 text-label-lg whitespace-nowrap text-white shadow-[0_6px_20px_rgba(0,0,0,0.25)] ${press} ${focusRing}`}
         >
           <BagIcon className="size-5" />
           <span>
-            View cart · <span className="tabular-nums">{count}</span>
+            View cart • <span className="tabular-nums">{count}</span>
           </span>
         </Link>
       )}

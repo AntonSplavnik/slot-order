@@ -1,22 +1,23 @@
 import type { Receipt } from "@slot-order/core";
 import { formatCents } from "@/lib/money";
 
-// A receipt as the order summary (docs/design.md §7.5, §11.6): optionally its lines, then Subtotal, the
-// discount, the VAT lines in grey and the Total in bold.
+// A receipt as the order summary (docs/design.md §7.5, §11.6, §11.7): optionally its lines (the quantity in a
+// small grey square), then rows 32 high: Subtotal and the discount in 16/20 `ink-2` (the discount green), the
+// VAT lines in 14/20 `ink-3`, the Total in 18/24 700 `ink`.
 
 function Row({
   label,
   cents,
-  className = "",
+  className,
   minus = false,
 }: {
   label: string;
   cents: number;
-  className?: string;
+  className: string;
   minus?: boolean;
 }) {
   return (
-    <div className={`flex justify-between gap-3 ${className}`}>
+    <div className={`flex min-h-8 items-center justify-between gap-3 ${className}`}>
       <span>{label}</span>
       <span className="shrink-0 tabular-nums">
         {minus ? "−" : ""}
@@ -28,38 +29,40 @@ function Row({
 
 export function ReceiptView({ receipt, lines = false }: { receipt: Receipt; lines?: boolean }) {
   return (
-    <div className="space-y-2">
+    <div>
       {lines && (
-        <ul className="mb-3 divide-y divide-neutral-200 border-b border-neutral-200">
+        <ul className="mb-2 divide-y divide-line border-b border-line">
           {receipt.lines.map((line, i) => (
             // The receipt's lines have no id; the index is their identity within one receipt.
             // biome-ignore lint/suspicious/noArrayIndexKey: see above
-            <li key={i} className="flex justify-between gap-3 py-2.5">
+            <li key={i} className="flex justify-between gap-3 py-3">
               <span className="flex min-w-0 gap-3">
-                <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded bg-neutral-100 px-1 text-sm font-semibold tabular-nums">
+                <span className="mt-px grid size-5 shrink-0 place-items-center rounded bg-well text-caption-strong tabular-nums">
                   {line.quantity}
                 </span>
                 <span className="min-w-0">
-                  <span className="block font-medium">{line.name}</span>
+                  <span className="block text-body">{line.name}</span>
                   {line.optionNames.length > 0 && (
-                    <span className="block text-sm text-neutral-500">
+                    <span className="block text-body-sm text-ink-3">
                       {line.optionNames.join(", ")}
                     </span>
                   )}
                 </span>
               </span>
-              <span className="shrink-0 tabular-nums">{formatCents(line.lineGrossCents)}</span>
+              <span className="shrink-0 text-body tabular-nums">
+                {formatCents(line.lineGrossCents)}
+              </span>
             </li>
           ))}
         </ul>
       )}
-      <Row label="Subtotal" cents={receipt.subtotalCents} />
+      <Row label="Subtotal" cents={receipt.subtotalCents} className="text-body text-ink-2" />
       {receipt.discountCents > 0 && (
         <Row
           label={`Discount${receipt.promoCode === undefined ? "" : ` (${receipt.promoCode})`}`}
           cents={receipt.discountCents}
           minus
-          className="text-green-700"
+          className="text-body text-green-text"
         />
       )}
       {receipt.vat.map((vat) => (
@@ -67,14 +70,10 @@ export function ReceiptView({ receipt, lines = false }: { receipt: Receipt; line
           key={vat.rate}
           label={`incl. ${vat.rate} % VAT on ${formatCents(vat.grossCents)}`}
           cents={vat.vatCents}
-          className="text-sm text-neutral-500"
+          className="text-body-sm text-ink-3"
         />
       ))}
-      <Row
-        label="Total"
-        cents={receipt.totalCents}
-        className="border-t border-neutral-200 pt-3 text-lg font-bold"
-      />
+      <Row label="Total" cents={receipt.totalCents} className="mt-2 text-total text-ink" />
     </div>
   );
 }

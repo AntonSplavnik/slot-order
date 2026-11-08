@@ -198,12 +198,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** design pass 3 on branch `m6-design` (PR #9): §11.7 written and reviewed against the design skills
-Anton installed (`better-*`, `emil-design-eng`, `mobile-native`: one colour pair replaced, truncation, sheet focus,
-the mobile baseline, motion and names written into §11.7), the `itemQuantity` tests red (4 of 229 web tests), the
-brief `docs/handoffs/m6-web-design3.md`; the implementer agent (Opus 5.5, high) is restyling the screens. Then: the
-checks, headless renders beside the reference, the spec's decisions, the README's third "What the agent got wrong"
-entry, the commit on `m6-design`, Anton's hand deploy for the phone look, his merge.
+**Next action:** design pass 3 is **implementation green** on `m6-design` (PR #9) and pushed: Anton deploys the web
+Worker by hand (`! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run
+deploy`), looks at it on the phone, and merges PR #9; then `main` is pulled, CI's redeploy of both Workers checked,
+Status → merged. The README's third "What the agent got wrong" entry and the hand-off are in the docs commit.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -214,7 +212,7 @@ entry, the commit on `m6-design`, Anton's hand deploy for the phone look, his me
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | merged 2026-11-07 (`648edc6`); design pass 2 on PR #9 (`b712312`, 2026-11-08) seen by Anton: structure right, look not; **design pass 3: tests written (red)** 2026-11-08 (§11.7 contract, 4 `itemQuantity` tests red on the stub, brief written, implementer running) | #7, #9 | core 373, web 229 (4 red), API 287, db 122; README has two "What the agent got wrong" entries, a third comes with pass 3 |
+| M6 | merged 2026-11-07 (`648edc6`); design pass 2 on PR #9 (`b712312`) seen by Anton: structure right, look not; **design pass 3 implementation green** 2026-11-08 (§11.7's measured tokens, Figtree, the design-skill review applied; CI on the PR next, then Anton's hand deploy and phone look, then his merge) | #7, #9 | core 373, web 229, API 287, db 122, typecheck, Biome, both builds; README gets its third "What the agent got wrong" entry |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)

@@ -938,8 +938,8 @@ restaurant's content).
 | 16/20 400 | option names, order-summary labels (`ink-2`), inputs and their placeholders, body text |
 | 14/20 400 | prices in the grid (`ink`), descriptions (`ink-3`), option summaries, group hints (`ink-2`), info lines, the VAT lines, staff order lines |
 | 14/20 500 | tab labels, chip and segment labels, the Required / Optional tag, Add items, status tags, "Product info"-style links |
-| 12/16 500 | the Popular tag, the small label under a value in the info boxes, the footer's Staff link |
-| 12/16 400 | the footer note, captions |
+| 12/16 500 | the Popular tag, the footer's Staff link |
+| 12/16 400 | the footer note, captions, the small label under a value in the info boxes |
 | 32/36 700, `tracking-[0.12em]` | the pickup code on the status and check-in pages |
 
 The scale is defined once in `globals.css` under `@theme` as named text utilities with **unitless** line-heights
@@ -1070,6 +1070,24 @@ runtime checks are the implementer's). What changed or is required because of it
   `leading-snug`, `tracking-tight`); weights never below 400; `tabular-nums` on prices, counts and codes.
 - Not reviewed: `better-ui` is not installed (visual polish and motion were taken from `emil-design-eng` and
   `mobile-native` instead); `interface-review` (change-scoped) was not run.
+
+**Decisions of the pass (the implementer's report, 2026-11-08).** Biome 2.6 refuses Tailwind's `@theme` block
+until `biome.json` says `"css": { "parser": { "tailwindDirectives": true } }` (one line, added by the
+orchestrator; the agent may not touch configs). The cover gradient's middle stop is `amber-500` (the brief's grep
+bans `orange-` outside `tiles.ts`); the cover's pattern glyphs are `text-3xl`. The name and promo inputs are named
+by their row titles through `aria-labelledby` rather than `<label htmlFor>`: the titles sit inside each row's
+expand button, and a label inside a button would nest interactive content; the promo input also carries
+`aria-invalid` and `aria-describedby` to its error line. The info boxes' small labels are 12/16 400 (the type
+table said 500 and the shapes list 400; the table is corrected). The Refresh pill has no icon (none in the icon
+list). The toast and the sheet render through portals into `<body>`, so a toast raised while the sheet is open is
+not inside the inert page; the sheet marks every other body child `inert` on open and clears exactly those on
+close. The store page's scroll-spy constants follow the new heights (sticky 112 px, the compact header's observer
+margin −56 px). Separators are "•" everywhere, including `optionSummary` and the staff board. `CheckIcon` uses
+stroke 2 like the other icons. Hover changes only where a token exists (`well` → `tag`); the primary button has
+no hover colour. The store card's grey line reads "Order ahead and show the QR code at the counter" so it does
+not repeat the chip. Checks: core 373, web 229, API 287, typecheck, Biome, `next build`, the OpenNext build; the
+two greps clean. Screens rendered at 390 × 844 over DevTools beside the reference; a phone still has to confirm
+the safe-area insets, the absence of the tap flash and of input zoom, and the drawer curve.
 
 **Decisions.** The exact font is unavailable, so "exact" means the closest open typeface, chosen on a rendered
 comparison and recorded here. Four values are Uber Base's rather than sampled (disabled and negative colours,

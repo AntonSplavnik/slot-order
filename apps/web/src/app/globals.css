@@ -1,21 +1,109 @@
-/* docs/design.md §11.3, §11.6: Tailwind 4, utility classes only; a white page, black primaries, green tags. The
- * two keyframes back the item sheet's slide-up and its backdrop's fade (used as `animate-[…]` utilities). */
+/* docs/design.md §11.3, §11.7: Tailwind 4, utility classes only. §11.7's sampled colours, its named type scale
+ * (unitless line-heights) and the two motions are theme tokens here, used as `bg-ink`, `text-title`,
+ * `animate-sheet-up` …; the base layer is the mobile baseline of §11.7's design-skill review. */
 @import "tailwindcss";
 
-@keyframes sheet-up {
-  from {
-    transform: translateY(100%);
+@theme {
+  --font-sans: var(--font-figtree), system-ui, sans-serif;
+
+  /* Colours (§11.7, sampled from the reference; disabled, negative and chevron are Uber Base's). */
+  --color-ink: #111111;
+  --color-ink-2: #525252;
+  --color-ink-3: #6b6b6b;
+  --color-line: #e4e4e4;
+  --color-line-2: #f3f3f3;
+  --color-well: #f6f6f6;
+  --color-tag: #ececec;
+  --color-green: #108041;
+  --color-green-text: #05632f;
+  --color-green-soft: #eaf6ed;
+  --color-green-soft-text: #166c3b;
+  --color-mute: #c4c4c4;
+  --color-chevron: #afafaf;
+  --color-disabled: #e2e2e2;
+  --color-disabled-text: #afafaf;
+  --color-negative: #ab1300;
+  --color-negative-soft: #ffefed;
+
+  /* Type scale (§11.7): size / unitless line-height / weight, one class per role. */
+  --text-title: 1.5rem;
+  --text-title--line-height: 1.1667;
+  --text-title--font-weight: 700;
+  --text-title--letter-spacing: -0.01em;
+  --text-heading: 1.25rem;
+  --text-heading--line-height: 1.2;
+  --text-heading--font-weight: 700;
+  --text-price-lg: 1.25rem;
+  --text-price-lg--line-height: 1.2;
+  --text-price-lg--font-weight: 500;
+  --text-label-lg: 1.125rem;
+  --text-label-lg--line-height: 1.3333;
+  --text-label-lg--font-weight: 500;
+  --text-total: 1.125rem;
+  --text-total--line-height: 1.3333;
+  --text-total--font-weight: 700;
+  --text-body-strong: 1rem;
+  --text-body-strong--line-height: 1.25;
+  --text-body-strong--font-weight: 500;
+  --text-body: 1rem;
+  --text-body--line-height: 1.25;
+  --text-body--font-weight: 400;
+  --text-body-sm: 0.875rem;
+  --text-body-sm--line-height: 1.4286;
+  --text-body-sm--font-weight: 400;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.4286;
+  --text-label--font-weight: 500;
+  --text-caption-strong: 0.75rem;
+  --text-caption-strong--line-height: 1.3333;
+  --text-caption-strong--font-weight: 500;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.3333;
+  --text-caption--font-weight: 400;
+  --text-code: 2rem;
+  --text-code--line-height: 1.125;
+  --text-code--font-weight: 700;
+  --text-code--letter-spacing: 0.12em;
+
+  /* Motion (§11.7): the sheet on the iOS drawer curve, fades opacity only. */
+  --animate-sheet-up: sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-fade-in: fade-in 200ms ease-out;
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
   }
-  to {
-    transform: translateY(0);
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
+@layer base {
+  /* No grey flash on tap, no font inflation in landscape. */
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
-  to {
-    opacity: 1;
+
+  /* Controls fire at once (no double-tap wait) and a long press does not select their label; content stays
+   * selectable. Tailwind 4's `hover:` is already gated by `(hover: hover)`. */
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
 }

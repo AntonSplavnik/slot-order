@@ -21,15 +21,15 @@ import { PageHeader } from "@/components/PageHeader";
 import { ReceiptView } from "@/components/ReceiptView";
 import { Tile, tilePositions } from "@/components/Tile";
 import {
-  cardHeading,
   errorBox,
   focusRing,
   linkButton,
   pillButton,
   pinnedBar,
+  press,
   primaryButton,
-  secondaryButton,
   sectionBand,
+  sectionHeading,
   textInput,
 } from "@/components/ui";
 import { useCart } from "@/components/useCart";
@@ -40,18 +40,22 @@ import { itemById } from "@/lib/menu";
 import { formatCents } from "@/lib/money";
 import { chip, dayLabel, dayStatusText, dayStrip } from "@/lib/slots";
 
-// `/checkout`, the cart and the checkout in one page (docs/design.md §11.1, §11.6): the lines as rows with a
-// tile and a stepper, rows for the pickup time (the day strip and the slot chips), the name and the promo code
+// `/checkout`, the cart and the checkout in one page (docs/design.md §11.1, §11.6, §11.7): the X, the big title,
+// the lines as rows with a tile and a stepper pill, rows for the pickup time (the day strip and the slot chips), the name and the promo code
 // (through POST /quotes), the order summary, and the pinned Pay → POST /orders → Stripe's page.
 
 /** `GET /slots` accepts at most 100 items (§10.1 `SlotsQuerySchema`); a bigger cart fails at POST /orders. */
 const MAX_SLOT_QUERY_ITEMS = 100;
 const NAME_MAX = 60;
 
+/** The stepper's round buttons inside the 36 high, 92 wide pill. */
+const stepButton = `grid size-9 place-items-center rounded-full text-ink disabled:text-mute ${press} ${focusRing}`;
+
 type DayResult = { ok: true; slots: SlotsResponse } | { ok: false; error: string };
 type RowId = "time" | "name" | "promo";
 
-/** A row with an icon, a label, the current value and a chevron; its content opens inline below it. */
+/** A row with an icon, a label, the current value and a chevron; its content opens inline below it. The label
+ * carries an id (`row-<id>-label`) so the field inside can be named by it. */
 function ExpandRow({
   id,
   icon,
@@ -70,22 +74,22 @@ function ExpandRow({
   children: ReactNode;
 }) {
   return (
-    <div className="border-b border-neutral-200 last:border-b-0">
+    <div className="border-b border-line last:border-b-0">
       <button
         type="button"
         aria-expanded={open}
         aria-controls={`row-${id}`}
         onClick={onToggle}
-        className={`flex min-h-16 w-full items-center gap-4 py-3 text-left ${focusRing}`}
+        className={`flex w-full items-center gap-4 py-4 text-left ${focusRing}`}
       >
-        <span className="shrink-0 text-neutral-900">{icon}</span>
+        <span className="shrink-0 text-ink">{icon}</span>
         <span className="min-w-0 flex-1">
-          <span className="block font-semibold">{label}</span>
+          <span id={`row-${id}-label`} className="block text-body-strong">
+            {label}
+          </span>
           {value}
         </span>
-        <ChevronRightIcon
-          className={`size-5 shrink-0 text-neutral-400 transition-transform ${open ? "rotate-90" : ""}`}
-        />
+        <ChevronRightIcon className={`size-5 shrink-0 text-chevron ${open ? "rotate-90" : ""}`} />
       </button>
       {open && (
         <div id={`row-${id}`} className="pb-4">
@@ -200,13 +204,18 @@ export default function CheckoutPage() {
     };
   }, [cart, setCart]);
 
-  const header = <PageHeader title="Checkout" back="/" />;
+  const header = (
+    <>
+      <PageHeader back={{ href: "/", label: "Back to the menu", icon: "close" }} />
+      <h1 className="pt-2 text-title">Checkout</h1>
+    </>
+  );
 
   if (menuError !== null) {
     return (
       <>
         {header}
-        <p role="alert" className={`${errorBox} mt-4 text-base`}>
+        <p role="alert" className={`${errorBox} mt-4`}>
           {menuError}
         </p>
       </>
@@ -222,7 +231,7 @@ export default function CheckoutPage() {
     return (
       <>
         {header}
-        <p className="pt-4 text-neutral-500">Loading…</p>
+        <p className="pt-4 text-body text-ink-3">Loading…</p>
       </>
     );
   }
@@ -275,14 +284,12 @@ export default function CheckoutPage() {
     <div>
       {header}
 
-      <section aria-labelledby="cart-title" className="pt-3">
-        <h2 id="cart-title" className={cardHeading}>
-          Your order
-        </h2>
-        <ul className="mt-2 divide-y divide-neutral-200">
+      <section aria-label="Your order" className="pt-2">
+        <ul className="divide-y divide-line">
           {cart.lines.map((line, i) => {
             const priced = receipt.lines[i];
             const item = itemById(menu, line.itemId);
+            const name = priced?.name ?? line.itemId;
             const summary =
               item === undefined
                 ? ""
@@ -292,56 +299,54 @@ export default function CheckoutPage() {
             return (
               <li
                 key={`${line.itemId}-${line.optionIds.join(",")}`}
-                className="flex items-start gap-3 py-4"
+                className="flex items-start gap-4 py-4"
               >
                 {item !== undefined ? (
                   <Tile item={item} index={positions.get(item.id) ?? i} size="line" />
                 ) : (
-                  <span aria-hidden="true" className="size-16 shrink-0 rounded-xl bg-neutral-100" />
+                  <span aria-hidden="true" className="size-18 shrink-0 rounded-xl bg-well" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="font-semibold leading-snug">{priced?.name ?? line.itemId}</p>
-                    {priced !== undefined && (
-                      <span className="shrink-0 tabular-nums">
-                        {formatCents(priced.lineGrossCents)}
-                      </span>
-                    )}
-                  </div>
-                  {summary !== "" && <p className="mt-0.5 text-sm text-neutral-500">{summary}</p>}
-                  <div className="mt-2 inline-flex items-center rounded-full bg-neutral-100">
-                    {line.quantity <= 1 ? (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${priced?.name ?? "line"}`}
-                        onClick={() => setCart(removeLine(cart, i))}
-                        className={`grid size-10 place-items-center rounded-full text-neutral-900 hover:bg-neutral-200 ${focusRing}`}
-                      >
-                        <TrashIcon className="size-[18px]" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label="One less"
-                        onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
-                        className={`grid size-10 place-items-center rounded-full text-neutral-900 hover:bg-neutral-200 ${focusRing}`}
-                      >
-                        <MinusIcon className="size-[18px]" />
-                      </button>
-                    )}
-                    <span className="w-6 text-center text-sm font-semibold tabular-nums">
-                      {line.quantity}
-                    </span>
+                  <p className="text-body-strong">{name}</p>
+                  {priced !== undefined && (
+                    <p className="mt-0.5 text-body-sm text-ink-3 tabular-nums">
+                      {formatCents(priced.lineGrossCents)}
+                    </p>
+                  )}
+                  {summary !== "" && (
+                    <p className="mt-0.5 text-body-sm break-words text-ink-3">{summary}</p>
+                  )}
+                </div>
+                <div className="mt-1 inline-flex h-9 w-[92px] shrink-0 items-center justify-between rounded-full bg-well">
+                  {line.quantity <= 1 ? (
                     <button
                       type="button"
-                      aria-label="One more"
-                      disabled={line.quantity >= 20}
-                      onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
-                      className={`grid size-10 place-items-center rounded-full text-neutral-900 enabled:hover:bg-neutral-200 disabled:text-neutral-300 ${focusRing}`}
+                      aria-label={`Remove ${name} from the cart`}
+                      onClick={() => setCart(removeLine(cart, i))}
+                      className={stepButton}
                     >
-                      <PlusIcon className="size-[18px]" />
+                      <TrashIcon className="size-5" />
                     </button>
-                  </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Remove one"
+                      onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
+                      className={stepButton}
+                    >
+                      <MinusIcon className="size-5" />
+                    </button>
+                  )}
+                  <span className="text-body-strong tabular-nums">{line.quantity}</span>
+                  <button
+                    type="button"
+                    aria-label="Add one"
+                    disabled={line.quantity >= 20}
+                    onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
+                    className={stepButton}
+                  >
+                    <PlusIcon className="size-5" />
+                  </button>
                 </div>
               </li>
             );
@@ -365,13 +370,11 @@ export default function CheckoutPage() {
           open={openRows.time}
           onToggle={() => toggle("time")}
           value={
-            chosenSlot !== undefined && selectedDay !== null ? (
-              <span className="block text-sm text-green-700">
-                {dayLabel(selectedDay, today)} · {chosenSlot.label}
-              </span>
-            ) : (
-              <span className="block text-sm text-neutral-500">Choose a slot</span>
-            )
+            <span className="block text-body-sm text-ink-2">
+              {chosenSlot !== undefined && selectedDay !== null
+                ? `${dayLabel(selectedDay, today)} • ${chosenSlot.label}`
+                : "Choose a slot"}
+            </span>
           }
         >
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
@@ -380,6 +383,14 @@ export default function CheckoutPage() {
               const status = result?.ok === true ? result.slots.status : undefined;
               const open = status === "open";
               const active = day === selectedDay;
+              const word =
+                result === undefined
+                  ? "…"
+                  : status === undefined
+                    ? "–"
+                    : status === "open"
+                      ? ""
+                      : dayStatusText(status);
               return (
                 <button
                   key={day}
@@ -390,22 +401,14 @@ export default function CheckoutPage() {
                     setSelectedDay(day);
                     setSelectedSlot(null);
                   }}
-                  className={`flex min-h-12 shrink-0 flex-col items-center justify-center rounded-full px-4 py-1.5 text-sm transition-colors ${
+                  className={`inline-flex h-9 shrink-0 items-center rounded-full px-3 text-label whitespace-nowrap ${
                     active && open
-                      ? "bg-neutral-900 text-white"
-                      : "bg-neutral-100 text-neutral-900 enabled:hover:bg-neutral-200"
-                  } disabled:bg-neutral-50 disabled:text-neutral-400 ${focusRing}`}
+                      ? "bg-ink text-white"
+                      : "bg-well text-ink not-disabled:hover:bg-tag"
+                  } disabled:cursor-not-allowed disabled:text-chevron ${press} ${focusRing}`}
                 >
-                  <span className="font-semibold whitespace-nowrap">{dayLabel(day, today)}</span>
-                  {(result === undefined || status !== "open") && (
-                    <span className="text-[11px] leading-tight">
-                      {result === undefined
-                        ? "…"
-                        : status === undefined
-                          ? "–"
-                          : dayStatusText(status)}
-                    </span>
-                  )}
+                  {dayLabel(day, today)}
+                  {word !== "" && ` • ${word}`}
                 </button>
               );
             })}
@@ -413,13 +416,13 @@ export default function CheckoutPage() {
 
           <div className="mt-3">
             {dayResult === undefined ? (
-              <p className="text-sm text-neutral-500">Loading the slots…</p>
+              <p className="text-body-sm text-ink-3">Loading the slots…</p>
             ) : !dayResult.ok ? (
-              <p className="text-sm text-red-700">{dayResult.error}</p>
+              <p className="text-body-sm text-negative">{dayResult.error}</p>
             ) : dayResult.slots.status !== "open" ? (
-              <p className="text-sm text-neutral-500">No pickup on this day.</p>
+              <p className="text-body-sm text-ink-3">No pickup on this day.</p>
             ) : dayResult.slots.slots.length === 0 ? (
-              <p className="text-sm text-neutral-500">No slots on this day.</p>
+              <p className="text-body-sm text-ink-3">No slots on this day.</p>
             ) : (
               <div className="grid grid-cols-4 gap-2">
                 {dayResult.slots.slots.map((slot) => {
@@ -433,16 +436,14 @@ export default function CheckoutPage() {
                       aria-pressed={active}
                       title={view.hint ?? undefined}
                       onClick={() => setSelectedSlot(slot.start)}
-                      className={`flex min-h-12 flex-col items-center justify-center rounded-lg border px-1 py-1.5 text-sm tabular-nums transition-colors ${
+                      className={`flex min-h-12 flex-col items-center justify-center rounded-lg border bg-white px-1 py-1.5 text-label tabular-nums ${
                         active
-                          ? "border-neutral-900 bg-neutral-900 text-white"
-                          : "border-neutral-200 bg-white enabled:hover:border-neutral-900"
-                      } disabled:cursor-not-allowed disabled:border-transparent disabled:bg-neutral-50 disabled:text-neutral-400 ${focusRing}`}
+                          ? "border-ink ring-1 ring-ink ring-inset"
+                          : "border-line not-disabled:hover:border-ink"
+                      } disabled:cursor-not-allowed disabled:border-well disabled:bg-well disabled:text-chevron ${press} ${focusRing}`}
                     >
-                      <span className="font-semibold">{view.label}</span>
-                      {view.hint !== null && (
-                        <span className="text-[10px] leading-tight">{view.hint}</span>
-                      )}
+                      <span>{view.label}</span>
+                      {view.hint !== null && <span className="text-caption">{view.hint}</span>}
                     </button>
                   );
                 })}
@@ -458,16 +459,18 @@ export default function CheckoutPage() {
           open={openRows.name}
           onToggle={() => toggle("name")}
           value={
-            <span className="block truncate text-sm text-neutral-500">
+            <span className="block text-body-sm break-words text-ink-2">
               {trimmedName === "" ? "For the counter" : trimmedName}
             </span>
           }
         >
           <input
             id="customer-name"
+            name="name"
             type="text"
-            aria-label="Your name"
+            aria-labelledby="row-name-label"
             autoComplete="given-name"
+            enterKeyHint="next"
             maxLength={NAME_MAX}
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -484,19 +487,15 @@ export default function CheckoutPage() {
           onToggle={() => toggle("promo")}
           value={
             hasCode ? (
-              <span className="block text-sm text-green-700">
-                <span className="font-mono font-semibold">{cart.promoCode}</span> applied
-              </span>
+              <span className="block text-label text-green-text">{cart.promoCode} applied</span>
             ) : (
-              <span className="block text-sm text-neutral-500">Add a code</span>
+              <span className="block text-body-sm text-ink-2">Add a code</span>
             )
           }
         >
           {hasCode ? (
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-green-700">
-                Code <span className="font-mono font-semibold">{cart.promoCode}</span> is applied.
-              </p>
+              <p className="text-label text-green-text">Code {cart.promoCode} is applied.</p>
               <button
                 type="button"
                 onClick={() => {
@@ -518,9 +517,17 @@ export default function CheckoutPage() {
               }}
             >
               <input
+                id="promo-code"
+                name="promo"
                 type="text"
-                aria-label="Promo code"
+                aria-labelledby="row-promo-label"
+                aria-invalid={promoError !== null ? true : undefined}
+                aria-describedby={promoError !== null ? "promo-error" : undefined}
                 autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="done"
                 value={promoInput}
                 onChange={(event) => setPromoInput(event.target.value)}
                 placeholder="Code"
@@ -529,26 +536,30 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 disabled={promoInput.trim() === ""}
-                className={`${secondaryButton} min-h-12 shrink-0`}
+                className={`inline-flex h-12 shrink-0 items-center rounded-lg bg-well px-4 text-label text-ink not-disabled:hover:bg-tag disabled:cursor-not-allowed disabled:text-disabled-text ${press} ${focusRing}`}
               >
                 Apply
               </button>
             </form>
           )}
-          {promoError !== null && <p className="mt-2 text-sm text-red-700">{promoError}</p>}
+          {promoError !== null && (
+            <p id="promo-error" className="mt-2 text-body-sm text-negative">
+              {promoError}
+            </p>
+          )}
         </ExpandRow>
       </section>
 
       <div className={sectionBand} />
 
-      <section aria-labelledby="summary-title" className="space-y-3 py-5">
-        <h2 id="summary-title" className={cardHeading}>
+      <section aria-labelledby="summary-title" className="py-4">
+        <h2 id="summary-title" className={`mb-2 ${sectionHeading}`}>
           Order summary
         </h2>
         {shown !== null ? (
           <ReceiptView receipt={shown} />
         ) : (
-          <p className="text-sm text-neutral-500">{quoteError ?? "Applying the code…"}</p>
+          <p className="text-body-sm text-ink-3">{quoteError ?? "Applying the code…"}</p>
         )}
       </section>
 
@@ -557,8 +568,8 @@ export default function CheckoutPage() {
       <div className="flex items-center gap-4 py-4">
         <CardIcon className="size-6 shrink-0" />
         <p className="min-w-0">
-          <span className="block font-semibold">Pay by card with Stripe</span>
-          <span className="block text-sm text-neutral-500">test mode</span>
+          <span className="block text-body-strong">Pay by card with Stripe</span>
+          <span className="block text-body-sm text-ink-2">test mode</span>
         </p>
       </div>
 
@@ -570,7 +581,7 @@ export default function CheckoutPage() {
             </p>
           )}
           {payError === null && !canPay && !paying && (
-            <p className="text-center text-sm text-neutral-500">
+            <p className="text-center text-body-sm text-ink-3">
               {!nameValid ? "Enter your name" : selectedSlot === null ? "Choose a pickup time" : ""}
             </p>
           )}
@@ -586,7 +597,7 @@ export default function CheckoutPage() {
               <span>
                 Pay
                 {shown !== null && (
-                  <span className="tabular-nums"> · {formatCents(shown.totalCents)}</span>
+                  <span className="tabular-nums"> • {formatCents(shown.totalCents)}</span>
                 )}
               </span>
             )}

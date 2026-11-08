@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-// The icons of the app, drawn inline (docs/design.md §11.6: no images, no icon package; a dozen at most).
+// The icons of the app, drawn inline (docs/design.md §11.6, §11.7: no images, no icon package; 24 viewBox, stroke 2,
+// round caps).
 
 type IconProps = { className?: string };
 
@@ -106,9 +107,9 @@ export function TrashIcon({ className = "size-5" }: IconProps) {
 
 export function CheckIcon({ className = "size-6" }: IconProps) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} {...stroke} strokeWidth={2.5}>
+    <Icon className={className}>
       <path d="M5 12.5l4.5 4.5L19 7.5" />
-    </svg>
+    </Icon>
   );
 }
 
