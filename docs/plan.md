@@ -202,9 +202,11 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** photo tiles are **green and pushed** on `m6-photos`, PR #10 open. Anton checks it locally
-(`pnpm dev:phone`, the printed URL in the laptop's browser; or `pnpm dev` when port 3000 is free), then merges; CI
-deploys both Workers from `main`; then `main` is pulled and Status → merged.
+**Next action:** nothing is open unless Anton asks. PR #10 (photo tiles, the wings cover) was merged 2026-11-08
+(`951e281`) after his local check; CI deployed both Workers from `main` (run 42487678056, green); the live site serves
+the photos with the one-day cache rule. Open, his call: the phone review over the LAN (§15), the API accepting
+`localhost` on any port (declined for now), M7 (POS mock; spec §16 first, tests first), a better coleslaw or
+ayran photo if one turns up.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -215,7 +217,7 @@ deploys both Workers from `main`; then `main` is pulled and Status → merged.
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **merged** 2026-11-07 (`648edc6`); design passes 2 and 3 **merged** 2026-11-08 (`47f539e`, PR #9: Uber-Eats-style skeleton, then the reference's type, shapes and colours measured from the screenshots, Figtree, the design-skill review; `pnpm dev:phone` for phone reviews); CI deployed both Workers from `main`, live verified | #7, #9 | core 373, web 229, API 287, db 122; README has three "What the agent got wrong" entries  **Photo tiles: implementation green, PR #10 open** 2026-11-08 (§11.8, branch `m6-photos`; 9 photo tests green, web 238; eleven free photos under `public/items` with `CREDITS.md`; the cover swapped to Anton's pick, glazed wings); Anton checks locally, then merges |
+| M6 | **merged** 2026-11-07 (`648edc6`); design passes 2 and 3 **merged** 2026-11-08 (`47f539e`, PR #9: Uber-Eats-style skeleton, then the reference's type, shapes and colours measured from the screenshots, Figtree, the design-skill review; `pnpm dev:phone` for phone reviews); CI deployed both Workers from `main`, live verified | #7, #9 | core 373, web 229, API 287, db 122; README has three "What the agent got wrong" entries  **Photo tiles merged** 2026-11-08 (`951e281`, PR #10: eleven free photos under `public/items` with `CREDITS.md`, the glyph tiles as fallback, the cover Anton picked from eight candidates; web 238 tests; CI deployed, live verified) |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)

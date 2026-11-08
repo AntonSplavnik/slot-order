@@ -1,6 +1,6 @@
 # Next session
 
-**Written:** 2026-11-08, after PR #9 was merged and deployed and PR #10 (photo tiles) was opened for Anton's local check. Start the new session
+**Written:** 2026-11-08, after PR #9 (design passes) and PR #10 (photo tiles) were merged and CI deployed `main`. Start the new session
 with the prompt at the end.
 
 ## State
@@ -12,11 +12,12 @@ with the prompt at the end.
   from the 23 reference screenshots, Figtree as the nearest open typeface, a named type scale, square tiles, the
   tile's round button showing the cart quantity (`itemQuantity`), the design-skill review (Anton's skills:
   `better-*`, `emil-design-eng`, `mobile-native`, …) applied before the implementation.
-- **PR #10 open, branch `m6-photos` (2026-11-08):** photo tiles. Anton approved a stock-photo mock (built by a
-  subagent; `reference/photo-mock/`, git-ignored) and asked to apply it: §11.8, eleven free photos (Pexels,
-  Unsplash; `apps/web/public/items/` with `CREDITS.md`), `photos.ts` with 9 tests, `Tile` with the glyph tile as
-  fallback, the cover photo. Green (web 238) and pushed; **Anton checks it locally first** (`pnpm dev:phone`, the
-  printed URL in the laptop's browser), then merges; CI deploys. Branch `m6-design` still exists on the remote.
+- **PR #10 merged and live (2026-11-08, `951e281`):** photo tiles. Anton approved a stock-photo mock (built by a
+  subagent; `reference/photo-mock/`, git-ignored), then picked the cover from a comparison page of eight candidates
+  (`reference/photo-mock/cover-candidates/`): §11.8, eleven free photos (Pexels, Unsplash; `apps/web/public/items/`
+  with `CREDITS.md`), `photos.ts` with 9 tests, `Tile` with the glyph tile as fallback, the wings cover. CI
+  deployed both Workers (run 42487678056); the live site serves `/items/*` with a one-day cache. Branches
+  `m6-design` and `m6-photos` still exist on the remote (nothing deleted on purpose). No PR open.
 - **README:** three "What the agent got wrong and what I changed" entries (bare UI → `a269fcf`; the reference →
   `b712312`; measured exactness and the skill review → `514a81a`).
 - **Private files (git-ignored):** `HANDOFF.md` (the brief), `MESSAGE.md` (the LinkedIn note, Anton edits and
@@ -77,7 +78,7 @@ milestone. Secrets never printed.
 
 ## Prompt for the new session
 ```
-Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. PR #10 (photo tiles) is open
-for my local check; if it is merged, update the Status table and check the deploys from main. Then continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
+Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. Nothing is open; PRs #9 and
+#10 are merged and deployed. Continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
 step.
 ```
