@@ -5,14 +5,22 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "@/components/browser";
-import { CheckIcon, ClockIcon } from "@/components/icons";
+import { CheckIcon, ClockIcon, PersonIcon } from "@/components/icons";
+import { PageHeader } from "@/components/PageHeader";
 import { TokenForm } from "@/components/TokenForm";
-import { card, linkButton, primaryButton, secondaryButton, textInput } from "@/components/ui";
+import {
+  card,
+  errorBox,
+  linkButton,
+  primaryButton,
+  secondaryButton,
+  textInput,
+} from "@/components/ui";
 import { useStaffToken } from "@/components/useStaffToken";
 import { ApiClientError } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 
-// `/staff/pickup?code=`, the check-in (docs/design.md §11.1): the QR code's target. With a token it calls
+// `/staff/pickup?code=`, the check-in (docs/design.md §11.1, §11.6 for the look): the QR code's target. With a token it calls
 // POST /staff/pickup once and shows the order and "Picked up ✓", or the error's text with a retry.
 
 type Result = { ok: true; order: StaffOrder } | { ok: false; error: string };
@@ -23,16 +31,16 @@ function CodeForm() {
   return (
     <div className="flex min-h-[55dvh] items-center">
       <form
-        className={`${card} w-full space-y-4 p-5`}
+        className="w-full space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           if (code.trim() !== "")
             router.push(`/staff/pickup?code=${encodeURIComponent(code.trim())}`);
         }}
       >
-        <h1 className="text-center text-xl font-semibold">Check in</h1>
+        <h2 className="text-center text-2xl font-bold">Enter the pickup code</h2>
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium">Pickup code</span>
+          <span className="mb-1.5 block text-sm font-semibold">Pickup code</span>
           <input
             type="text"
             autoCapitalize="characters"
@@ -55,14 +63,14 @@ function CodeForm() {
 /** An order's lines, one per row. */
 function Lines({ order }: { order: StaffOrder }) {
   return (
-    <ul className="space-y-1 text-left text-sm text-stone-700">
+    <ul className="divide-y divide-neutral-200 text-left text-sm text-neutral-900">
       {order.lines.map((line, i) => (
         // The lines have no id; the index is their identity within one order.
         // biome-ignore lint/suspicious/noArrayIndexKey: see above
-        <li key={i}>
-          <span className="tabular-nums">{line.quantity} ×</span> {line.name}
+        <li key={i} className="py-2">
+          <span className="font-semibold tabular-nums">{line.quantity} ×</span> {line.name}
           {line.optionNames.length > 0 && (
-            <span className="text-stone-500"> ({line.optionNames.join(", ")})</span>
+            <span className="text-neutral-500"> ({line.optionNames.join(", ")})</span>
           )}
         </li>
       ))}
@@ -100,13 +108,17 @@ function Pickup({
     void send();
   }, [token, code, send]);
 
-  if (result === null) return <p className="text-center text-stone-500">Checking in {code}…</p>;
+  if (result === null)
+    return <p className="pt-6 text-center text-neutral-500">Checking in {code}…</p>;
   if (!result.ok) {
     return (
       <div className="flex min-h-[55dvh] items-center">
-        <div className="w-full space-y-4 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
+        <div className="w-full space-y-4 text-center">
+          <span className="mx-auto grid size-16 place-items-center rounded-full bg-red-50 text-3xl font-bold text-red-700">
+            !
+          </span>
           <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
-          <p role="alert" className="font-medium text-red-700">
+          <p role="alert" className={`${errorBox} text-base font-medium`}>
             {result.error}
           </p>
           <button type="button" onClick={() => void send()} className={`${primaryButton} w-full`}>
@@ -123,30 +135,28 @@ function Pickup({
   const { order } = result;
   return (
     <div className="flex min-h-[55dvh] items-center">
-      <div className={`${card} w-full overflow-hidden text-center`}>
-        <div className="space-y-2 bg-green-50 px-5 py-6 text-green-700">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-green-600 text-white">
+      <div className="w-full space-y-4">
+        <div className="space-y-2 text-center">
+          <span className="mx-auto grid size-16 place-items-center rounded-full bg-green-700 text-white">
             <CheckIcon className="size-9" />
           </span>
-          <h1 className="text-2xl font-bold">Picked up ✓</h1>
-        </div>
-        <div className="space-y-3 px-5 py-5">
+          <h2 className="text-2xl font-bold">Picked up ✓</h2>
           <p className="font-mono text-3xl font-bold tracking-widest">{order.pickupCode}</p>
-          <p className="flex items-center justify-center gap-2 font-medium">
-            <span>{order.customerName}</span>
-            <span className="text-stone-400">·</span>
-            <span className="inline-flex items-center gap-1 tabular-nums">
-              <ClockIcon className="size-4 text-stone-500" />
-              {order.slotLabel}
-            </span>
-          </p>
-          <div className="rounded-xl bg-stone-50 px-4 py-3">
-            <Lines order={order} />
-          </div>
-          <Link href="/staff" className={`${secondaryButton} w-full`}>
-            To the board
-          </Link>
         </div>
+        <div className={`${card} px-4`}>
+          <p className="flex items-center gap-3 border-b border-neutral-200 py-3">
+            <PersonIcon className="size-5 shrink-0" />
+            <span className="font-semibold">{order.customerName}</span>
+          </p>
+          <p className="flex items-center gap-3 border-b border-neutral-200 py-3 tabular-nums">
+            <ClockIcon className="size-5 shrink-0" />
+            <span>Pickup at {order.slotLabel}</span>
+          </p>
+          <Lines order={order} />
+        </div>
+        <Link href="/staff" className={`${secondaryButton} w-full`}>
+          To the board
+        </Link>
       </div>
     </div>
   );
@@ -162,25 +172,38 @@ function CheckIn() {
     setFormError(errorText("unauthorized"));
   }, [clear]);
 
-  if (token === undefined) return <p className="text-stone-500">Loading…</p>;
-  if (token === null) {
-    return (
-      <TokenForm
-        error={formError}
-        onSave={(next) => {
-          setFormError(null);
-          save(next);
-        }}
-      />
-    );
-  }
-  if (code === "") return <CodeForm />;
-  return <Pickup token={token} code={code} onUnauthorized={unauthorized} />;
+  return (
+    <>
+      <PageHeader title="Check in" back="/staff" />
+      {token === undefined ? (
+        <p className="pt-4 text-neutral-500">Loading…</p>
+      ) : token === null ? (
+        <TokenForm
+          error={formError}
+          onSave={(next) => {
+            setFormError(null);
+            save(next);
+          }}
+        />
+      ) : code === "" ? (
+        <CodeForm />
+      ) : (
+        <Pickup token={token} code={code} onUnauthorized={unauthorized} />
+      )}
+    </>
+  );
 }
 
 export default function PickupPage() {
   return (
-    <Suspense fallback={<p className="text-stone-500">Loading…</p>}>
+    <Suspense
+      fallback={
+        <>
+          <PageHeader title="Check in" back="/staff" />
+          <p className="pt-4 text-neutral-500">Loading…</p>
+        </>
+      }
+    >
       <CheckIn />
     </Suspense>
   );

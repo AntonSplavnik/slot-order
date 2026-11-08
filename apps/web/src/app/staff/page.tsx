@@ -3,14 +3,22 @@
 import type { StaffBoard, StaffOrder } from "@slot-order/core";
 import { useCallback, useEffect, useState } from "react";
 import { api, berlinToday, messageOf } from "@/components/browser";
+import { PageHeader } from "@/components/PageHeader";
 import { TokenForm } from "@/components/TokenForm";
-import { card, secondaryButton, smallPrimaryButton } from "@/components/ui";
+import {
+  card,
+  errorBox,
+  greenTag,
+  pillButton,
+  smallPrimaryButton,
+  smallSecondaryButton,
+} from "@/components/ui";
 import { useStaffToken } from "@/components/useStaffToken";
 import { ApiClientError } from "@/lib/api";
 import { errorText } from "@/lib/errors";
 import { formatCents } from "@/lib/money";
 
-// `/staff`, the board (docs/design.md §11.1): the day's slots from GET /staff/orders with booked/capacity, a card
+// `/staff`, the board (docs/design.md §11.1, §11.6 for the look): the day's slots from GET /staff/orders with booked/capacity, a card
 // per order with Ready (paid) and Picked up (paid or ready); refreshed every 10 s; a date input for other days.
 
 const REFRESH_MS = 10_000;
@@ -28,14 +36,14 @@ function isUnauthorized(error: unknown): boolean {
   return error instanceof ApiClientError && error.code === "unauthorized";
 }
 
-/** The status tag's colours (paid orange, ready green, picked up stone). */
+/** The status tag's colours (paid black, ready green, the rest grey; cancelled red). */
 const STATUS_TAG: Record<StaffOrder["status"], string> = {
-  held: "bg-stone-100 text-stone-600",
-  paid: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
-  ready: "bg-green-50 text-green-700 ring-1 ring-green-200",
-  picked_up: "bg-stone-100 text-stone-500",
-  expired: "bg-stone-100 text-stone-500",
-  cancelled: "bg-red-50 text-red-700",
+  held: "rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-semibold text-neutral-600",
+  paid: "rounded bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-white",
+  ready: greenTag,
+  picked_up: "rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-semibold text-neutral-500",
+  expired: "rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-semibold text-neutral-500",
+  cancelled: "rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700",
 };
 
 function OrderCard({
@@ -51,31 +59,27 @@ function OrderCard({
 }) {
   const done = order.status === "picked_up";
   return (
-    <li className={`px-4 py-3 ${done ? "opacity-60" : ""}`}>
+    <li className={`px-4 py-3.5 ${done ? "opacity-50" : ""}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="font-mono text-lg font-bold tracking-wider">{order.pickupCode}</span>
-          <span className="truncate font-medium">{order.customerName}</span>
+          <span className="truncate font-semibold">{order.customerName}</span>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_TAG[order.status]}`}
-        >
-          {STATUS_TEXT[order.status]}
-        </span>
+        <span className={`shrink-0 ${STATUS_TAG[order.status]}`}>{STATUS_TEXT[order.status]}</span>
       </div>
-      <ul className="mt-1 text-sm text-stone-700">
+      <ul className="mt-1 text-sm text-neutral-900">
         {order.lines.map((line, i) => (
           // The lines have no id; the index is their identity within one order.
           // biome-ignore lint/suspicious/noArrayIndexKey: see above
           <li key={i}>
             <span className="tabular-nums">{line.quantity} ×</span> {line.name}
             {line.optionNames.length > 0 && (
-              <span className="text-stone-500"> ({line.optionNames.join(", ")})</span>
+              <span className="text-neutral-500"> ({line.optionNames.join(", ")})</span>
             )}
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-stone-500 tabular-nums">
+      <p className="mt-1 text-xs text-neutral-500 tabular-nums">
         {order.itemCount} {order.itemCount === 1 ? "item" : "items"} ·{" "}
         {formatCents(order.totalCents)}
       </p>
@@ -95,7 +99,7 @@ function OrderCard({
             type="button"
             disabled={busy}
             onClick={onPickup}
-            className={`${smallPrimaryButton} flex-1`}
+            className={`${order.status === "ready" ? smallPrimaryButton : smallSecondaryButton} flex-1`}
           >
             Picked up
           </button>
@@ -153,9 +157,9 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
   const orders = board?.slots.reduce((total, slot) => total + slot.orders.length, 0) ?? 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pt-3">
       <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-auto text-xl font-semibold">Orders</h1>
+        <h2 className="mr-auto text-xl font-bold">Orders</h2>
         <input
           type="date"
           aria-label="Day"
@@ -163,33 +167,26 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
           onChange={(event) => {
             if (event.target.value !== "") setDate(event.target.value);
           }}
-          className="min-h-11 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base focus:border-orange-600 focus:ring-2 focus:ring-orange-600/30 focus:outline-none"
+          className="min-h-10 rounded-full border border-transparent bg-neutral-100 px-4 py-1.5 text-base focus:border-neutral-900 focus:outline-none"
         />
-        <button
-          type="button"
-          onClick={() => void load()}
-          className={`${secondaryButton} px-3 py-2 text-sm`}
-        >
+        <button type="button" onClick={() => void load()} className={pillButton}>
           Refresh
         </button>
       </div>
 
       {error !== null && (
-        <p
-          role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-        >
+        <p role="alert" className={errorBox}>
           {error}
         </p>
       )}
 
       {board === null ? (
-        <p className="text-stone-500">Loading…</p>
+        <p className="text-neutral-500">Loading…</p>
       ) : board.status !== "open" && board.slots.length === 0 ? (
-        <p className={`${card} px-4 py-6 text-center text-stone-500`}>No service on this day.</p>
+        <p className={`${card} px-4 py-6 text-center text-neutral-500`}>No service on this day.</p>
       ) : (
         <>
-          <p className="text-sm text-stone-500">
+          <p className="text-sm text-neutral-500">
             {orders} {orders === 1 ? "order" : "orders"}
           </p>
           <div className="space-y-2">
@@ -198,11 +195,11 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
                 <section
                   key={slot.start}
                   aria-label={`Slot ${slot.label}`}
-                  className="px-4 py-1 text-sm text-stone-400"
+                  className="px-4 py-1 text-sm text-neutral-400"
                 >
-                  <h2 className="tabular-nums">
+                  <h3 className="tabular-nums">
                     {slot.label} · {slot.booked}/{slot.capacity}
-                  </h2>
+                  </h3>
                 </section>
               ) : (
                 <section
@@ -210,14 +207,14 @@ function Board({ token, onUnauthorized }: { token: string; onUnauthorized: () =>
                   aria-label={`Slot ${slot.label}`}
                   className={`${card} overflow-hidden`}
                 >
-                  <h2 className="border-b border-stone-200 bg-stone-50 px-4 py-2 font-semibold tabular-nums">
+                  <h3 className="border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 font-bold tabular-nums">
                     {slot.label}
-                    <span className="font-normal text-stone-500">
+                    <span className="font-normal text-neutral-500">
                       {" "}
                       · {slot.booked}/{slot.capacity}
                     </span>
-                  </h2>
-                  <ul className="divide-y divide-stone-100">
+                  </h3>
+                  <ul className="divide-y divide-neutral-200">
                     {slot.orders.map((order) => (
                       <OrderCard
                         key={order.id}
@@ -247,17 +244,22 @@ export default function StaffPage() {
     setFormError(errorText("unauthorized"));
   }, [clear]);
 
-  if (token === undefined) return <p className="text-stone-500">Loading…</p>;
-  if (token === null) {
-    return (
-      <TokenForm
-        error={formError}
-        onSave={(next) => {
-          setFormError(null);
-          save(next);
-        }}
-      />
-    );
-  }
-  return <Board token={token} onUnauthorized={unauthorized} />;
+  return (
+    <>
+      <PageHeader title="Staff" back="/" />
+      {token === undefined ? (
+        <p className="pt-4 text-neutral-500">Loading…</p>
+      ) : token === null ? (
+        <TokenForm
+          error={formError}
+          onSave={(next) => {
+            setFormError(null);
+            save(next);
+          }}
+        />
+      ) : (
+        <Board token={token} onUnauthorized={unauthorized} />
+      )}
+    </>
+  );
 }

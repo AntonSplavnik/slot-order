@@ -1,2 +1,21 @@
-/* docs/design.md §11.3: Tailwind 4; utility classes only, one accent colour (orange). */
+/* docs/design.md §11.3, §11.6: Tailwind 4, utility classes only; a white page, black primaries, green tags. The
+ * two keyframes back the item sheet's slide-up and its backdrop's fade (used as `animate-[…]` utilities). */
 @import "tailwindcss";
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -3,34 +3,79 @@
 import type { OrderSummary } from "@slot-order/core";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
 import { api, messageOf } from "@/components/browser";
-import { ClockIcon } from "@/components/icons";
+import { ClockIcon, PersonIcon } from "@/components/icons";
+import { PageHeader } from "@/components/PageHeader";
 import { ReceiptView } from "@/components/ReceiptView";
-import { card, primaryButton, secondaryButton } from "@/components/ui";
+import { card, errorBox, primaryButton, secondaryButton, sectionBand } from "@/components/ui";
 import { pickupUrl, qrSvg } from "@/lib/qr";
-import { type StatusTone, shouldPoll, statusView } from "@/lib/status";
+import { shouldPoll, statusView } from "@/lib/status";
 
-// `/orders/[id]`, the status (docs/design.md §11.1): polls GET /orders/:id every 3 s while held; paid and ready
-// show the QR code of the staff pickup URL (§3 Pickup code), the code in letters, the slot and the receipt.
+// `/orders/[id]`, the status (docs/design.md §11.1, §11.6): polls GET /orders/:id every 3 s while held; the
+// headline from `statusView`, a three-step progress line; paid and ready show the QR code of the staff pickup URL
+// (§3 Pickup code) and the code in letters; the slot, the name and the receipt.
 
 const POLL_MS = 3000;
 
-/** The colour of the status card's top band, by tone. */
-const TONE: Record<StatusTone, string> = {
-  waiting: "bg-stone-100 text-stone-900",
-  good: "bg-orange-600 text-white",
-  done: "bg-stone-100 text-stone-900",
-  bad: "bg-red-50 text-red-700",
+/** The three steps of a paid order (§4): how many each status has reached. */
+const STEPS = ["Paid", "Ready", "Picked up"] as const;
+const REACHED: Partial<Record<OrderSummary["status"], number>> = {
+  paid: 1,
+  ready: 2,
+  picked_up: 3,
 };
 
-/** The body text under the title, by tone (readable on the band's colour). */
-const TONE_BODY: Record<StatusTone, string> = {
-  waiting: "text-stone-600",
-  good: "text-orange-50",
-  done: "text-stone-600",
-  bad: "text-red-700",
+/** The word under a grey progress line, for the statuses outside the three steps. */
+const OFF_TRACK: Partial<Record<OrderSummary["status"], string>> = {
+  held: "Waiting for payment",
+  expired: "Expired",
+  cancelled: "Cancelled",
 };
+
+function Progress({ status }: { status: OrderSummary["status"] }) {
+  const reached = REACHED[status] ?? 0;
+  const off = OFF_TRACK[status];
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-1.5">
+        {STEPS.map((step, i) => (
+          <span
+            key={step}
+            className={`h-1.5 rounded-full ${i < reached ? "bg-neutral-900" : "bg-neutral-200"}`}
+          />
+        ))}
+      </div>
+      {off !== undefined ? (
+        <p className="text-sm text-neutral-500">{off}</p>
+      ) : (
+        <ol className="grid grid-cols-3 text-sm">
+          {STEPS.map((step, i) => (
+            <li
+              key={step}
+              aria-current={i === reached - 1 ? "step" : undefined}
+              className={`${i === 1 ? "text-center" : i === 2 ? "text-right" : ""} ${
+                i < reached ? "font-semibold text-neutral-900" : "text-neutral-400"
+              }`}
+            >
+              {step}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** A detail row: an icon and a line. */
+function Detail({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+  return (
+    <p className="flex items-center gap-4 border-b border-neutral-200 py-3.5 last:border-b-0">
+      <span className="shrink-0 text-neutral-900">{icon}</span>
+      <span>{children}</span>
+    </p>
+  );
+}
 
 function OrderStatus() {
   const { id } = useParams<{ id: string }>();
@@ -71,21 +116,25 @@ function OrderStatus() {
     };
   }, [code]);
 
+  const header = <PageHeader title="Your order" />;
+
   if (order === null) {
-    return error === null ? (
-      <p className="text-stone-500">Loading your order…</p>
-    ) : (
-      <div className="space-y-4">
-        <p
-          role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
-        >
-          {error}
-        </p>
-        <Link href="/" className={`${secondaryButton} w-full`}>
-          Back to the menu
-        </Link>
-      </div>
+    return (
+      <>
+        {header}
+        {error === null ? (
+          <p className="pt-4 text-neutral-500">Loading your order…</p>
+        ) : (
+          <div className="space-y-4 pt-4">
+            <p role="alert" className={`${errorBox} text-base`}>
+              {error}
+            </p>
+            <Link href="/" className={`${secondaryButton} w-full`}>
+              Back to the menu
+            </Link>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -95,65 +144,66 @@ function OrderStatus() {
   const showCode = code !== undefined && (order.status === "paid" || order.status === "ready");
 
   return (
-    <div className="space-y-5">
-      <div className={`${card} overflow-hidden`}>
-        <div className={`px-5 py-5 ${TONE[view.tone]}`}>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {view.body !== "" && <p className={`mt-1 ${TONE_BODY[view.tone]}`}>{view.body}</p>}
+    <div>
+      {header}
+
+      <div className="space-y-4 pt-4 pb-5">
+        <div>
+          <h2 className="text-2xl leading-tight font-bold tracking-tight">{title}</h2>
+          {view.body !== "" && <p className="mt-1 text-neutral-500">{view.body}</p>}
         </div>
-
-        {held && !confirming && order.checkoutUrl != null && (
-          <div className="p-5">
-            <a href={order.checkoutUrl} className={`${primaryButton} w-full`}>
-              Continue to payment
-            </a>
-          </div>
-        )}
-
-        {showCode && (
-          <section aria-label="Pickup code" className="space-y-4 px-5 py-6 text-center">
-            {svg !== null && (
-              <div
-                className="mx-auto w-60 rounded-2xl border border-stone-200 bg-white p-3 shadow-sm"
-                // Our own SVG, made by `qrcode` from the pickup URL (§11.2 `qr.ts`).
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
-                dangerouslySetInnerHTML={{ __html: svg }}
-              />
-            )}
-            <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
-            {order.status === "ready" && (
-              <p className="text-sm text-stone-600">Show this at the counter</p>
-            )}
-            <p className="flex items-center justify-center gap-2 text-stone-600">
-              <ClockIcon className="size-4 shrink-0 text-orange-600" />
-              <span>
-                Pickup at <span className="font-semibold text-stone-900">{order.slotLabel}</span>{" "}
-                for {order.customerName}
-              </span>
-            </p>
-          </section>
-        )}
-
-        {!showCode && order.status !== "held" && (
-          <p className="flex items-center gap-2 px-5 py-4 text-sm text-stone-600">
-            <ClockIcon className="size-4 shrink-0" />
-            <span>
-              Slot {order.slotLabel}, {order.customerName}
-            </span>
-          </p>
-        )}
+        <Progress status={order.status} />
       </div>
 
-      <section aria-labelledby="receipt-title" className={`${card} space-y-3 p-5`}>
-        <h2 id="receipt-title" className="text-lg font-semibold">
-          Receipt
+      {held && !confirming && order.checkoutUrl != null && (
+        <a href={order.checkoutUrl} className={`${primaryButton} mb-5 w-full`}>
+          Continue to payment
+        </a>
+      )}
+
+      {showCode && (
+        <section
+          aria-label="Pickup code"
+          className={`${card} mb-5 space-y-3 px-5 py-6 text-center`}
+        >
+          {svg !== null && (
+            <div
+              className="mx-auto w-56"
+              // Our own SVG, made by `qrcode` from the pickup URL (§11.2 `qr.ts`).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
+              dangerouslySetInnerHTML={{ __html: svg }}
+            />
+          )}
+          <p className="font-mono text-3xl font-bold tracking-widest">{code}</p>
+          {order.status === "ready" && (
+            <p className="text-sm text-neutral-500">Show this at the counter</p>
+          )}
+        </section>
+      )}
+
+      {!held && (
+        <div className="mb-2">
+          <Detail icon={<ClockIcon className="size-6" />}>
+            Pickup at <span className="font-semibold">{order.slotLabel}</span>
+          </Detail>
+          <Detail icon={<PersonIcon className="size-6" />}>{order.customerName}</Detail>
+        </div>
+      )}
+
+      <div className={sectionBand} />
+
+      <section aria-labelledby="summary-title" className="space-y-3 py-5">
+        <h2 id="summary-title" className="text-xl font-bold">
+          Order summary
         </h2>
-        <ReceiptView receipt={order.receipt} />
+        <ReceiptView receipt={order.receipt} lines />
       </section>
 
-      {error !== null && <p className="text-center text-xs text-stone-500">{error}</p>}
+      {error !== null && <p className="pb-3 text-center text-xs text-neutral-500">{error}</p>}
 
-      {(order.status === "expired" || order.status === "cancelled") && (
+      {(order.status === "expired" ||
+        order.status === "cancelled" ||
+        order.status === "picked_up") && (
         <Link href="/" className={`${secondaryButton} w-full`}>
           Back to the menu
         </Link>
@@ -164,7 +214,14 @@ function OrderStatus() {
 
 export default function OrderPage() {
   return (
-    <Suspense fallback={<p className="text-stone-500">Loading your order…</p>}>
+    <Suspense
+      fallback={
+        <>
+          <PageHeader title="Your order" />
+          <p className="pt-4 text-neutral-500">Loading your order…</p>
+        </>
+      }
+    >
       <OrderStatus />
     </Suspense>
   );
