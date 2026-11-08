@@ -34,7 +34,7 @@ production check, CV.
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **merged** 2026-11-07 (`648edc6`); Anton ran the whole flow on the phone; his review asked for a less bare UI → the polish pass `a269fcf` and the README's first "What the agent got wrong" entry | #7 | web Worker `slot-order-web.antonsplavnik.workers.dev`; core 373, web 218, API 287, db 122; CI deploys both Workers from `main` |
+| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 running** 2026-11-08 after Anton's second review (the look after the polish still fell short; reference: Uber Eats' store layout, coloured tiles instead of photos; `docs/handoffs/m6-web-design.md`) | #7 | web Worker live; core 373, web 218, API 287, db 122 |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -198,11 +198,12 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** none open. 2026-11-07: M0–M6 merged; CI deploys the migrations, the API Worker and the web Worker
-from `main` (verified after PR #8: every job green, the live pages on the CI build, the API healthy). Anton sends
-the LinkedIn note (`MESSAGE.md`, private). The CV entry is skipped (his CV was already sent). M7 (POS mock) only if
-he asks; spec §16 first. Feedback from the employer that changes code is an entry for the README's "What the agent
-got wrong and what I changed".
+**Next action:** design pass 2 on a branch `m6-design` (the screens and components only, plus `src/lib/tiles.ts`
+with tests): the agent (Opus 5.5, high) from `docs/handoffs/m6-web-design.md`; review the screenshots, the checks
+and both builds; commit; push; PR; Anton redeploys the web by hand (`! cd apps/web &&
+NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy`) and looks; merge; the
+README's second "What the agent got wrong" entry (the look after the polish still fell short; Anton set the
+reference). Then the LinkedIn note goes out.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -217,6 +218,7 @@ got wrong and what I changed".
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-08, M6 (Anton's second review): the look after the first polish still fell short; Anton set Uber Eats' standardized store layout as the reference and chose coloured tiles over photos. §11's "no design system" line replaced by the reference and its rules; §11.6 added. The reference screenshots stay outside git (`reference/`, ignored): layout only, no content of theirs. In the design-pass PR.
 - 2026-11-07, after the M6 merge: the first CI run on `main` deployed the migrations and the API and failed at the web step: `pnpm --filter @slot-order/web deploy` is pnpm's built-in `deploy` command, not the package script; `run deploy` (§14, the CI step, the docs). Caught by CI, not by a review; the live web Worker was the hand deploy of the same commit. PR `fix-ci-web-deploy`.
 - 2026-11-07, M6 (Anton's review of PR #7): the screens looked bare; a polish pass (`a269fcf`, screens and components only, behaviour untouched) and the README's first "What the agent got wrong and what I changed" entry. §11.5 records the look; §16 the four small behaviours left out on purpose. In the M6 PR.
 - 2026-11-07, M6 (after the implementer's report): §11.5 added with its decisions: the money format, the cart's repair rule and the 30-line limit, the promo code quoted per exact cart, the day strip's loading rule and defaults, the Pay button's conditions, the status page's extras, the staff board's pickup-by-code and 401 handling, the check-in page's single call, Next 16.4's `agentRules`, the ignored generated files. The implementer could not edit `apps/api/wrangler.toml` (`WEB_ORIGIN`) and the CI deploy step (the sandbox classifier refused them as production changes); the orchestrator applied both as the plan had them. All green: core 373, web 218, API 287, Next build, OpenNext build. In the M6 green commit.

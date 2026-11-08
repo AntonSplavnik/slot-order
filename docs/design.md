@@ -724,7 +724,9 @@ with core's schemas, and prices the cart locally with core's `priceCart` while a
 | `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`; a 401 clears it and asks again). The day's slots from `GET /staff/orders?date=` as sections with `booked/capacity`; each order a card: code, name, lines with options, status, buttons **Ready** (paid) and **Picked up** (paid or ready). Refreshes every 10 s. A date input for other days. |
 | `/staff/pickup?code=` | **Check-in.** The QR code's target. With a token: calls `POST /staff/pickup` and shows the order and "Picked up ✓", or the error's text (`invalid_code`, `invalid_transition`). Without: asks for the token first. |
 
-No design system beyond Tailwind defaults and one accent colour. No dark mode work. No images.
+The look, after Anton's reviews (§11.5, §11.6): the skeleton of a delivery app's store page (the reference he
+chose, 2026-11-08, is Uber Eats' standardized store layout) with coloured tiles instead of photos, Tailwind
+utilities only, the system font, black primary buttons, green for positive tags. No dark mode work. No images.
 
 ### 11.2 Library (`apps/web/src/lib/`): pure functions, tested without a DOM
 - `config.ts`: `apiBaseUrl()` = `NEXT_PUBLIC_API_URL` without a trailing slash, default `http://localhost:8787`.
@@ -857,6 +859,23 @@ demo (§13 Manual).
   `aria-pressed` on day pills and chips. Behaviour untouched.
 - The web app's `.wrangler/` and `.open-next/` are build output (git-ignored); `pnpm --filter @slot-order/web
   build` must pass on a clean checkout without `.next/` (CI's typecheck does).
+
+### 11.6 Design pass 2 (Anton's review, 2026-11-08)
+Anton was not satisfied with the look after the first polish and set a reference: Uber Eats' store layout, which
+is the same for every restaurant there (only photos, names and prices differ), so there is one skeleton to follow.
+Decisions: coloured tiles instead of photos (`src/lib/tiles.ts`: a six-colour warm palette cycling by position and
+an emoji glyph per seed item, the name's initial as the fallback; pure, tested); a cover band with the Goldhahn
+mark and a white card overlapping it with the name and an info line; a sticky horizontal bar of section tabs with a
+scroll-spy; sections as a two-column grid of item cards (tile with a round "+" button, name, price, a two-line
+description, the green "Popular" tag on combos); a floating "View cart · n" pill; the item sheet full-height with
+a hero tile, the option groups tagged "Required" or "Optional" with a "Choose 1" / "Choose up to 2" subtitle,
+a quantity stepper and the pinned black "Add n to cart · total" button (the stepper calls `addLine` n times, which
+merges); the checkout in the cart-page style (rows with a small tile, option summary, a stepper with a trash icon
+at one; rows with icons for pickup time, name and promo code; the order summary; a "Pay by card with Stripe · test
+mode" row; the pinned "Pay · total" button); the status page with a three-step progress line (Paid → Ready →
+Picked up) in the same language; the staff pages keep their structure in the same language. The reference
+screenshots live outside git (`reference/`, ignored): a real restaurant's store, used for layout only; none of its
+content is in the repo. The brief: `docs/handoffs/m6-web-design.md`.
 
 ## 12. Errors
 
