@@ -1388,6 +1388,29 @@ none`, so fast taps on the pill's "+" never zoom; the pill's 36 px buttons and t
 focus stays visible above the compact header through `scroll-padding-top`. To check on a phone: the safe areas
 in landscape, the drawer curve, the crossfade, that fast taps on "+" register each tap.
 
+**Decisions of the pass (the implementer's report, 2026-11-08).** The sheet is `ItemPage.tsx`; the quick-add
+control (the round "+" or the pill) is one component, `QuickAddControl`, on the grid and in the rows; the count
+tick is `Count` (keyed on the value; the value it mounted with never animates); `Tile` gained the `row` size (48,
+radius 8); `ui.ts` gained `roundSurface` (the round look without its motion) and `stepButton`; `sheet-up` and
+`fade-in` left the theme (nothing used them). Departures, accepted: (1) "Add n to cart" on a full cart (the
+30-line limit) keeps the page open and puts "Your cart is full." at the top (`onAdd` answers false); this section
+had described only the success path. (2) The pill keeps `role="group"` under a `biome-ignore`
+(`useSemanticElements` wants a `<fieldset>`, whose box quirks do not suit a 40 px inline pill). (3) The round "+"
+and the pill play their M5 entrance only after a swap, never at first mount (otherwise every drink control would
+fade in at load and on each page open), the same rule as M4's. (4) With drinks, the whole scroller is `well` and
+the content above the rows sits on a white wrapper, so the well runs to the scroller's end on short pages
+(Coleslaw) without a fragile min-height. (5) The cart pill does not use `press` (two `transition-[…]` lists would
+conflict): its own 250 ms list with `not-disabled:active:scale-[0.97]` and `active:duration-150`, so the press
+takes 150 ms and the release 250 ms. (6) Under reduced motion at `sm:` the entrance fade lasts 250 ms, not 200
+(`sm:duration-250` wins over `motion-reduce:duration-200` in the compiled order); the exit is 150 ms either way.
+Verified headless (DevTools, real key events): Enter on a drink's round "+" moves focus to the pill's "+", Enter
+on its "−" at 1 moves it back; the page focuses "Close item", the cart pill is mounted and inert beneath it, the
+live region is not inert; after Escape the dialog stays through the exit, then unmounts with focus back on the
+opener and no `inert` left; the tab segment moves with its transition on. Noticed, unchanged: the scroll-spy's
+threshold (§11.8). Checks: core 373, web 275 (238 + 37), API 287, typecheck, Biome, `next build`, the OpenNext
+build; the greps clean with the one `truncate`. Still for the phone: the safe areas, the drawer curve, the
+crossfade, fast taps on "+".
+
 **Decisions.** A full-screen page over the store rather than a route: the cart, the scroll position and the
 scroll-spy stay put, the photo and the groups are already in the menu the page has, and a route would need a
 loading state and a back-button contract (§16). Drinks as the one upsell list because it is data-driven

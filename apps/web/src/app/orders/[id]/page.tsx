@@ -3,7 +3,7 @@
 import type { OrderSummary } from "@slot-order/core";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { type ReactNode, Suspense, useCallback, useEffect, useState } from "react";
+import { type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { api, messageOf } from "@/components/browser";
 import { ClockIcon, PersonIcon } from "@/components/icons";
 import { PageHeader } from "@/components/PageHeader";
@@ -21,7 +21,8 @@ import { shouldPoll, statusView } from "@/lib/status";
 
 // `/orders/[id]`, the status (docs/design.md §11.1, §11.6, §11.7): polls GET /orders/:id every 3 s while held; the
 // headline from `statusView`, a three-step progress line; paid and ready show the QR code of the staff pickup URL
-// (§3 Pickup code) and the code in letters; the slot, the name and the receipt.
+// (§3 Pickup code) and the code in letters; the slot, the name and the receipt. The progress fills and the QR card
+// enters by `@starting-style` (§11.9 M11, M12).
 
 const POLL_MS = 3000;
 
@@ -40,14 +41,27 @@ const OFF_TRACK: Partial<Record<OrderSummary["status"], string>> = {
   cancelled: "Cancelled",
 };
 
+/** The fill's delay per step on the first render (80 ms after the one before, §11.9 M11). */
+const FILL_DELAY = ["", "delay-80", "delay-160"] as const;
+
 function Progress({ status }: { status: OrderSummary["status"] }) {
   const reached = REACHED[status] ?? 0;
   const off = OFF_TRACK[status];
+  /** Steps reached at the first render fill one after another; a step reached later fills at once. */
+  const initial = useRef(reached);
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-3 gap-1.5">
         {STEPS.map((step, i) => (
-          <span key={step} className={`h-1 rounded-full ${i < reached ? "bg-ink" : "bg-line"}`} />
+          <span key={step} className="relative h-1 rounded-full bg-line">
+            {i < reached && (
+              <span
+                className={`absolute inset-0 origin-left rounded-full bg-ink transition-[scale] duration-300 ease-out-strong motion-safe:starting:scale-x-0 motion-reduce:transition-none ${
+                  i < initial.current ? FILL_DELAY[i] : ""
+                }`}
+              />
+            )}
+          </span>
         ))}
       </div>
       {off !== undefined ? (
@@ -169,7 +183,7 @@ function OrderStatus() {
         <section aria-label="Pickup code" className={`${card} mb-5 space-y-3 p-6 text-center`}>
           {svg !== null && (
             <div
-              className="mx-auto w-56"
+              className="mx-auto w-56 transition-[scale,opacity] duration-250 ease-out-strong starting:opacity-0 motion-safe:starting:scale-97"
               // Our own SVG, made by `qrcode` from the pickup URL (§11.2 `qr.ts`).
               // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
               dangerouslySetInnerHTML={{ __html: svg }}

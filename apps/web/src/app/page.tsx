@@ -1,30 +1,40 @@
 "use client";
 
-import type { MenuItem } from "@slot-order/core";
+import type { Cart, MenuItem } from "@slot-order/core";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Count } from "@/components/Count";
+import { ItemPage } from "@/components/ItemPage";
 import { BagIcon, PlusIcon } from "@/components/icons";
 import { describe } from "@/components/menuText";
-import { OptionSheet } from "@/components/OptionSheet";
+import { QuickAddControl } from "@/components/QuickAddControl";
 import { Tile, tilePositions } from "@/components/Tile";
 import { errorBox, focusRing, greenTag, press, roundButton } from "@/components/ui";
 import { useCart } from "@/components/useCart";
-import { addLine, itemCount, itemQuantity } from "@/lib/cart";
-import { menuSections, type SectionId } from "@/lib/menu";
+import { addLine, itemCount, itemQuantity, removeOne } from "@/lib/cart";
+import { menuSections, quickAdds, type SectionId, upsellItems } from "@/lib/menu";
 import { formatCents } from "@/lib/money";
 import { coverPhoto } from "@/lib/photos";
 
-// `/`, the store page (docs/design.md §11.1, §11.6, §11.7): a cover band, the white card with the name, sticky
-// section tabs with a scroll-spy, each section a two-column grid of item cards (the round button shows the
-// item's quantity in the cart once there is one), the item sheet, the floating cart pill.
+// `/`, the store page (docs/design.md §11.1, §11.6, §11.7, §11.9): a cover band, the white card with the name,
+// sticky section tabs with a sliding segment and a scroll-spy, each section a two-column grid of item cards, the
+// item page, the floating cart pill. A quick-add item (a drink, §11.2 `quickAdds`) goes into the cart from its
+// tile or its round "+", which becomes the "−" / count / "+" pill; every other item opens the item page.
 
 /** CartSchema's line limit (§7.1): a new line beyond it is refused. */
 const MAX_LINES = 30;
 /** The compact header (56) plus the tab bar (44 labels, the 5 px track, 3 px white, the 4 px band = 56): where
  * a section's top counts as "reached". */
 const STICKY_PX = 112;
+/** The toast's life: the same 2500 ms as `--animate-toast` in globals.css (§11.9 M7). */
 const NOTICE_MS = 2500;
+/** CartLine's quantity maximum (§7.1). */
+const MAX_QUANTITY = 20;
+/** The toast's place, fixed when it is raised (§11.9): at the top while the item page stays open, else at the
+ * bottom, above the cart pill when there is one. */
+const NOTICE_PLACE = { top: "top-4", pill: "bottom-24", bottom: "bottom-6" } as const;
+type Notice = { text: string; key: number; place: keyof typeof NOTICE_PLACE };
 /** The cover band's photo (§11.8). */
 const cover = coverPhoto();
 
@@ -34,7 +44,7 @@ function CartButton({ count }: { count: number }) {
       <BagIcon className="size-5" />
       {count > 0 && (
         <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-ink px-1 text-caption-strong text-white tabular-nums">
-          {count}
+          <Count value={count} />
         </span>
       )}
     </>
@@ -60,10 +70,17 @@ function CartButton({ count }: { count: number }) {
 export default function MenuPage() {
   const { menu, menuError, cart, receipt, setCart } = useCart();
   const [sheet, setSheet] = useState<MenuItem | null>(null);
-  const [notice, setNotice] = useState<{ text: string; key: number } | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [compact, setCompact] = useState(false);
   const [active, setActive] = useState<SectionId | null>(null);
+  /** The live region's portal needs `document`: it mounts (empty) after the first render. */
+  const [mounted, setMounted] = useState(false);
+  /** The tab segment: the active tab's place in the tab row, measured (§11.9 M9). */
+  const [segment, setSegment] = useState<{ left: number; width: number } | null>(null);
+  const [segmentReady, setSegmentReady] = useState(false);
   const nameRef = useRef<HTMLHeadingElement>(null);
+  const tabRowRef = useRef<HTMLDivElement>(null);
+  const noticeKey = useRef(0);
   /** Scroll-spy updates are ignored until then, while a tapped tab's smooth scroll runs. */
   const spyLockedUntil = useRef(0);
 
@@ -73,6 +90,8 @@ export default function MenuPage() {
     [menu],
   );
   const sectionKey = sections.map((s) => s.id).join(",");
+
+  useEffect(() => setMounted(true), []);
 
   // The compact header appears once the store name has scrolled under it.
   useEffect(() => {
@@ -120,35 +139,77 @@ export default function MenuPage() {
     };
   }, [sectionKey]);
 
-  // The "Added …" toast fades after a moment.
+  // The tab segment follows the active tab: measured when the active tab changes and when the row resizes (the
+  // font swapping in, a rotation), never on scroll. The first placement has no transition.
+  useLayoutEffect(() => {
+    const row = tabRowRef.current;
+    if (row === null || active === null || sectionKey === "") return;
+    const measure = () => {
+      const tab = row.querySelector<HTMLElement>(`[data-section="${active}"]`);
+      if (tab === null) return;
+      const next = { left: tab.offsetLeft, width: tab.offsetWidth };
+      setSegment((current) =>
+        current?.left === next.left && current.width === next.width ? current : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [active, sectionKey]);
+
+  const segmentPlaced = segment !== null;
+  useEffect(() => {
+    if (!segmentPlaced) return;
+    const frame = requestAnimationFrame(() => setSegmentReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, [segmentPlaced]);
+
+  // The toast ends after its animation; the live region empties with it.
   useEffect(() => {
     if (notice === null) return;
     const timer = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [notice]);
 
-  function say(text: string): void {
-    setNotice({ text, key: Date.now() });
+  /** Raises the toast: at the top when the item page stays open, else at the bottom over or without the pill. */
+  function say(text: string, top: boolean, after: Cart): void {
+    noticeKey.current += 1;
+    const place = top ? "top" : itemCount(after) > 0 ? "pill" : "bottom";
+    setNotice({ text, key: noticeKey.current, place });
   }
 
-  /** Adds `quantity` of the item with these options: `addLine` that many times (it merges, §11.2). */
-  function add(item: MenuItem, optionIds: string[], quantity: number): void {
-    if (cart === null) return;
+  /** Adds `quantity` of the item with these options: `addLine` that many times (it merges, §11.2). `top`: the
+   * item page stays open after it. False when the cart is full (a refusal keeps an open page open). */
+  function add(item: MenuItem, optionIds: string[], quantity: number, top: boolean): boolean {
+    if (cart === null) return false;
     let next = addLine(cart, item.id, optionIds);
     if (next.lines.length > MAX_LINES) {
-      say("Your cart is full.");
-      return;
+      say("Your cart is full.", sheet !== null, cart);
+      return false;
     }
     for (let i = 1; i < quantity; i++) next = addLine(next, item.id, optionIds);
     setCart(next);
-    say(`Added ${quantity > 1 ? `${quantity} × ` : ""}${item.name}.`);
-    setSheet(null);
+    say(`Added ${quantity > 1 ? `${quantity} × ` : ""}${item.name}.`, top, next);
+    return true;
   }
 
-  /** The round "+": an item without groups goes into the cart at once, one with groups opens the sheet. */
-  function quickAdd(item: MenuItem): void {
-    if (item.optionGroups.length > 0) setSheet(item);
-    else add(item, [], 1);
+  /** One more of a quick-add item (its tile, its "+"); at 20 nothing is added. */
+  function addOne(item: MenuItem, top: boolean): void {
+    if (cart === null) return;
+    if (itemQuantity(cart, item.id) >= MAX_QUANTITY) {
+      say("You can add up to 20.", top, cart);
+      return;
+    }
+    add(item, [], 1, top);
+  }
+
+  /** One fewer of a quick-add item (the pill's "−", §11.2 `removeOne`). */
+  function removeOneOf(item: MenuItem, top: boolean): void {
+    if (cart === null) return;
+    const next = removeOne(cart, item.id);
+    setCart(next);
+    say(`Removed ${item.name}.`, top, next);
   }
 
   function jumpTo(id: SectionId): void {
@@ -164,11 +225,11 @@ export default function MenuPage() {
 
   return (
     <div className="-mx-4">
-      {/* The compact header, once the band has scrolled away. */}
+      {/* The compact header, once the band has scrolled away; it fades both ways (M3). */}
       <div
         aria-hidden={!compact}
-        className={`fixed inset-x-0 top-0 z-30 bg-white transition-opacity duration-150 ${
-          compact ? "opacity-100" : "pointer-events-none invisible opacity-0"
+        className={`fixed inset-x-0 top-0 z-30 bg-white transition-opacity duration-150 ease-out-strong ${
+          compact ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
         <p className="mx-auto flex h-14 max-w-md items-center justify-center text-label-lg">
@@ -234,29 +295,41 @@ export default function MenuPage() {
         <>
           <nav aria-label="Menu sections" className="sticky top-14 z-20 mt-4 bg-white">
             <div className="overflow-x-auto [scrollbar-width:none]">
-              <div className="flex w-max min-w-full px-4 shadow-[inset_0_-5px_0_var(--color-line)]">
+              <div
+                ref={tabRowRef}
+                className="relative flex w-max min-w-full px-4 shadow-[inset_0_-5px_0_var(--color-line)]"
+              >
                 {sections.map((section) => {
                   const isActive = section.id === active;
                   return (
                     <button
                       key={section.id}
                       type="button"
+                      data-section={section.id}
                       aria-current={isActive ? "true" : undefined}
                       onClick={() => jumpTo(section.id)}
-                      className={`relative h-[49px] shrink-0 px-4 pb-[5px] text-label whitespace-nowrap ${
+                      className={`h-[49px] shrink-0 px-4 pb-[5px] text-label whitespace-nowrap transition-colors duration-150 ${
                         isActive ? "text-ink" : "text-ink-3 hover:text-ink"
                       } ${focusRing}`}
                     >
                       {section.title}
-                      <span
-                        aria-hidden="true"
-                        className={`absolute inset-x-0 bottom-0 h-[5px] ${
-                          isActive ? "bg-ink" : "bg-transparent"
-                        }`}
-                      />
                     </button>
                   );
                 })}
+                {/* One segment under the active tab, sliding between tabs (M9). */}
+                {segment !== null && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      transform: `translateX(${segment.left}px) scaleX(${segment.width / 100})`,
+                    }}
+                    className={`absolute bottom-0 left-0 h-[5px] w-[100px] origin-left bg-ink ${
+                      segmentReady
+                        ? "transition-transform duration-250 ease-in-out-strong motion-reduce:transition-none"
+                        : ""
+                    }`}
+                  />
+                )}
               </div>
             </div>
             <div aria-hidden="true" className="mt-[3px] h-1 bg-line-2" />
@@ -277,15 +350,14 @@ export default function MenuPage() {
                   {section.items.map((item) => {
                     const description = describe(menu, item);
                     const inCart = cart === null ? 0 : itemQuantity(cart, item.id);
-                    const action =
-                      item.optionGroups.length > 0
-                        ? `Choose options for ${item.name}`
-                        : `Add ${item.name} to cart`;
+                    const quick = quickAdds(item);
                     return (
                       <li key={item.id} className="relative">
+                        {/* Pointer only: its function is on the round button or the pill. */}
                         <button
                           type="button"
-                          onClick={() => setSheet(item)}
+                          tabIndex={-1}
+                          onClick={() => (quick ? addOne(item, false) : setSheet(item))}
                           className={`block w-full rounded-xl text-left ${press} ${focusRing}`}
                         >
                           <Tile item={item} index={positions.get(item.id) ?? 0} size="grid" />
@@ -303,20 +375,30 @@ export default function MenuPage() {
                           {item.kind === "combo" && (
                             <span className={`mt-2 ${greenTag}`}>Popular</span>
                           )}
+                          {quick && <span className="sr-only">, add one</span>}
                         </button>
                         <div className="pointer-events-none absolute inset-x-0 top-0 aspect-square">
-                          <button
-                            type="button"
-                            aria-label={inCart > 0 ? `${inCart} in cart. ${action}` : action}
-                            onClick={() => quickAdd(item)}
-                            className={`pointer-events-auto absolute right-2 bottom-2 size-9 ${roundButton}`}
-                          >
-                            {inCart > 0 ? (
-                              <span className="text-body-strong tabular-nums">{inCart}</span>
-                            ) : (
-                              <PlusIcon className="size-5" />
-                            )}
-                          </button>
+                          {quick ? (
+                            <QuickAddControl
+                              item={item}
+                              quantity={inCart}
+                              onAdd={() => addOne(item, false)}
+                              onRemove={() => removeOneOf(item, false)}
+                              className="pointer-events-auto absolute right-2 bottom-2"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`${inCart > 0 ? `${inCart} in cart. ` : ""}Add ${item.name}`}
+                              aria-haspopup="dialog"
+                              onClick={() => setSheet(item)}
+                              className={`pointer-events-auto absolute right-2 bottom-2 size-9 ${roundButton}`}
+                            >
+                              <Count value={inCart} className="text-body-strong tabular-nums">
+                                {inCart > 0 ? inCart : <PlusIcon className="size-4" />}
+                              </Count>
+                            </button>
+                          )}
                         </div>
                       </li>
                     );
@@ -328,40 +410,58 @@ export default function MenuPage() {
         </>
       )}
 
+      {/* Every toast's text, for screen readers: one region, always mounted (empty at first), outside the page
+          the item page makes inert. */}
+      {mounted &&
+        createPortal(
+          <div data-live-region="" role="status" className="sr-only">
+            {notice !== null && <span key={notice.key}>{notice.text}</span>}
+          </div>,
+          document.body,
+        )}
+
       {notice !== null &&
-        // Into the body, beside the sheet, so it is not inside the page the open sheet makes inert.
+        // Into the body, beside the item page, so it is not inside the page the open item page makes inert. The
+        // live region above speaks it; this one is for the eyes (M7: one keyframe over its life).
         createPortal(
           <p
             key={notice.key}
-            role="status"
-            className={`fixed left-1/2 z-50 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 animate-fade-in rounded-lg bg-ink px-4 py-3 text-center text-label text-white ${
-              sheet !== null ? "top-4" : showPill ? "bottom-24" : "bottom-6"
-            }`}
+            aria-hidden="true"
+            className={`fixed left-1/2 z-50 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg bg-ink px-4 py-3 text-center text-label text-white motion-reduce:animate-toast-fade ${
+              notice.place === "top" ? "motion-safe:animate-toast-top" : "motion-safe:animate-toast"
+            } ${NOTICE_PLACE[notice.place]}`}
           >
             {notice.text}
           </p>,
           document.body,
         )}
 
-      {showPill && sheet === null && (
+      {/* The cart pill rises when the cart stops being empty (M6); it stays mounted under the item page. */}
+      {showPill && (
         <Link
           href="/checkout"
-          className={`fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))] left-1/2 z-20 inline-flex h-14 -translate-x-1/2 items-center gap-2.5 rounded-full bg-ink px-6 text-label-lg whitespace-nowrap text-white shadow-[0_6px_20px_rgba(0,0,0,0.25)] ${press} ${focusRing}`}
+          className={`fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))] left-1/2 z-20 inline-flex h-14 -translate-x-1/2 items-center gap-2.5 rounded-full bg-ink px-6 text-label-lg whitespace-nowrap text-white shadow-[0_6px_20px_rgba(0,0,0,0.25)] transition-[transform,translate,scale,opacity] duration-250 ease-out-strong starting:opacity-0 motion-safe:starting:[transform:translateY(16px)] active:duration-150 not-disabled:active:scale-[0.97] ${focusRing}`}
         >
           <BagIcon className="size-5" />
           <span>
-            View cart • <span className="tabular-nums">{count}</span>
+            View cart • <Count value={count} className="tabular-nums" />
           </span>
         </Link>
       )}
 
       {sheet !== null && menu !== null && (
-        <OptionSheet
+        <ItemPage
+          key={sheet.id}
           item={sheet}
           tileIndex={positions.get(sheet.id) ?? 0}
           description={describe(menu, sheet)}
-          onAdd={(ids, quantity) => add(sheet, ids, quantity)}
-          onClose={() => setSheet(null)}
+          drinks={upsellItems(menu, sheet)}
+          tileIndexOf={(id) => positions.get(id) ?? 0}
+          quantityOf={(id) => (cart === null ? 0 : itemQuantity(cart, id))}
+          onAdd={(ids, quantity) => add(sheet, ids, quantity, false)}
+          onAddDrink={(drink) => addOne(drink, true)}
+          onRemoveDrink={(drink) => removeOneOf(drink, true)}
+          onClosed={() => setSheet(null)}
         />
       )}
     </div>
