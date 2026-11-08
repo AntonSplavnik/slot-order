@@ -100,4 +100,6 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
 - **API:** https://slot-order-api.antonsplavnik.workers.dev (Cloudflare Workers, Frankfurt-region Supabase behind it).
   Try `GET /health`, `GET /menu`, `GET /slots?date=YYYY-MM-DD` (Sundays answer `closed`). Deployed by CI from `main`.
 - **Web app:** https://slot-order-web.antonsplavnik.workers.dev (Next.js on Workers via OpenNext). The customer
-  flow pays with Stripe's test card `4242 4242 4242 4242`; `/staff` asks for the staff token.
+  flow pays with Stripe's test card `4242 4242 4242 4242`. `/staff` and the QR check-in ask for the staff token
+  once; it is not in the repo (§3 Trust boundary) and is shared privately with reviewers, since the demo runs in
+  test mode on fictional data.
