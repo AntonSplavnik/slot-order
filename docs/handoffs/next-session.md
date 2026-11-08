@@ -1,13 +1,14 @@
 # Next session
 
-**Written:** 2026-11-08, after PR #11 (design pass 4, the item page) was opened. Start the new session with the
+**Written:** 2026-11-08, after PR #11 (design pass 4, the item page) was merged and CI deployed `main`. Start the new session with the
 prompt at the end.
 
 ## State
 - **Merged and live:** M0–M6 (#1–#7), the CI fix #8, PR #9 (design passes 2 and 3, `pnpm dev:phone`), PR #10 (photo
-  tiles, the wings cover). CI deploys both Workers from `main` (API `https://slot-order-api.antonsplavnik.workers.dev`,
+  tiles, the wings cover), PR #11 (design pass 4, the item page; merged `f126139` 2026-11-08 on Anton's "good
+  enough" after the laptop renders; CI run 42504152246 deployed both Workers; live verified by curl). CI deploys both Workers from `main` (API `https://slot-order-api.antonsplavnik.workers.dev`,
   web `https://slot-order-web.antonsplavnik.workers.dev`).
-- **PR #11 open (2026-11-08), branch `m6-item-page`, waiting for Anton:** design pass 4, `docs/design.md` §11.9.
+- **PR #11, what it was:** design pass 4, `docs/design.md` §11.9.
   Anton's fourth review: the tile's "+" opens the item's page for food and combos (as the reference does), drinks go
   straight into the cart and show a "−" / count / "+" pill once added (his two additions while the work ran, the
   second from a screenshot in `reference/uber-eats-3/`), and more motion, planned with the `improve-animations` and
@@ -17,11 +18,9 @@ prompt at the end.
   commit (README's fourth "What the agent got wrong" entry, plan, this file). Checks: core 373, web 275, API 287,
   typecheck, Biome, `next build`, the OpenNext build, the greps (one `truncate`). Renders at 390 × 844 in the
   session scratchpad (gone with it; the DevTools driver scripts too; easy to redo).
-- **Anton's review of #11:** on the phone over the LAN (`pnpm dev:phone` on the branch; the §15 issue may still
-  block the API from the phone, in which case the laptop's browser at 390 wide). Only a phone can confirm the safe
-  areas, the drawer curve, the header crossfade and fast taps on "+". Two calls he can flip without touching the
-  library: a drink's **tile** tap adds one (there is no detail page for drinks; "nothing" or "open the page" are the
-  alternatives); the item page's "Add a drink" rows carry the same pill as the grid.
+- **Not reviewed on a phone:** #11 was merged from the laptop renders. Still for a phone: the safe areas, the
+  drawer curve, the header crossfade, fast taps on "+". Two calls Anton can flip without touching the library: a
+  drink's **tile** tap adds one; the item page's "Add a drink" rows carry the same pill as the grid.
 - **Open, his call:** descriptions and more option groups for the other dishes so every item page has choices
   (a data change: `supabase/seed.sql`, the core fixture `packages/core/test/fixtures/menu.ts`, and a migration for
   the live database, since the seed was applied once; optional groups only keep every pinned receipt valid); the
@@ -51,10 +50,11 @@ prompt at the end.
 8. Anton's corrections become README entries ("What the agent got wrong and what I changed", with the commit).
 
 ## Next action
-Wait for Anton's review of PR #11. If he asks for changes: a follow-up commit on `m6-item-page` (spec first if a
-rule changes), push, the PR updates. After his merge: `git checkout main && git pull`, the plan's Status → merged,
-check the live site. Then only what he asks for (the data change for descriptions and option groups is the likely
-next pass: spec §5 and §11.9 first, the fixture and seed, a migration, tests first).
+Nothing is open unless Anton asks. The likely next pass is the data change (descriptions and option groups for
+the other dishes): spec §5 and §11.9 first, then the core fixture and the seed together, a migration that inserts
+the new rows for the live database (idempotent), tests first (core pricing stays green if the new groups are
+optional), then the web shows them without code changes. Otherwise the §16 items, the phone-review issue (§15), or
+M7.
 
 ## Rules in force
 Subagents on Opus 5.5, xhigh for logic, high for screens and docs. Plan Status at every step. Spec first, tests
@@ -63,7 +63,7 @@ PRs per pass. Secrets never printed. Anton cannot open claude.ai artifacts: deli
 
 ## Prompt for the new session
 ```
-Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. PR #11 (design
-pass 4, the item page) is open on m6-item-page and waits for my review. Continue only with what I ask for, spec
+Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. Nothing is open; PR #11
+(design pass 4, the item page) is merged and deployed. Continue only with what I ask for, spec
 first and tests first, and update the plan's Status table at every step.
 ```
