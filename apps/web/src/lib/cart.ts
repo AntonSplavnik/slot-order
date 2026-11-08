@@ -91,6 +91,15 @@ export function itemQuantity(cart: Cart, itemId: string): number {
   );
 }
 
+/**
+ * One fewer of `itemId` (§11.2, §11.9): the line with that item and no options (the only line a quick-added
+ * item can have) loses one; at quantity 1 the line is removed. No such line → an equal cart. A line with
+ * options is never touched; the promo code and the other lines stay. The input is not mutated.
+ */
+export function removeOne(_cart: Cart, _itemId: string): Cart {
+  throw new Error("not implemented");
+}
+
 /** Core's `priceCart` on the public menu (no promo codes) and the cart without its code; a CartError propagates. */
 export function priceLocally(menu: PublicMenu, cart: Cart): Receipt {
   return priceCart({ ...menu, promoCodes: [] }, { lines: cart.lines });

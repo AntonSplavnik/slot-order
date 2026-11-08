@@ -202,11 +202,7 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** nothing is open unless Anton asks. PR #10 (photo tiles, the wings cover) was merged 2026-11-08
-(`951e281`) after his local check; CI deployed both Workers from `main` (run 42487678056, green); the live site serves
-the photos with the one-day cache rule. Open, his call: the phone review over the LAN (§15), the API accepting
-`localhost` on any port (declined for now), M7 (POS mock; spec §16 first, tests first), a better coleslaw or
-ayran photo if one turns up.
+**Next action:** design pass 4, **the item page** (Anton, 2026-11-08: the tile's "+" opens the item's page for every item, as the reference does; more animation, planned with the motion skills). Branch `m6-item-page`. Step: **tests written (red)**: the contract is committed (§11.9 the item page, drinks quick-add with the pill, twelve motions; four stubs; 37 red web tests; `docs/handoffs/m6-item-page-impl.md`); the implementer subagent is running from that brief. Then: the orchestrator's review and checks, the `M6: item page (green)` commit, push, PR, Anton's phone review (`pnpm dev:phone`), merge. Still open, his call: the phone review over the LAN (§15), the API accepting `localhost` on any port (declined for now), M7 (POS mock; spec §16 first, tests first), a better coleslaw or ayran photo if one turns up.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -221,6 +217,7 @@ ayran photo if one turns up.
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-08, M6 (design pass 4 contract, Anton's fourth review: the tile's "+" opens the item page as the reference does; drinks go straight into the cart and show a "−" / count / "+" pill; more motion): §11.9 added (behaviour, the full-screen item page measured from `reference/uber-eats-2/` and `-3/`, the grid's controls and names, the motion list M1–M12 from the `improve-animations` and `animate` skills, the deferred motions); §11.1 the `/` row; §11.2 `removeOne`, `quickAdds`, `upsellItems`, `groupHint`; §16 the later items. The orchestrator gave the item page's drink rows the same pill as the grid. In the pass-4 contract commit.
 - 2026-11-08, photo tiles (Anton approved the stock-photo mock built by a subagent): §11.8 added (eleven free photos on dark surfaces, Pexels and Unsplash, the files under `public/items`, `CREDITS.md`, the `/items/*` cache rule, `Tile` with the glyph tile as fallback, the cover photo), §11.2 `photos.ts`, §11.3 the cache rule, §11.4 the tests. In the photo-tiles contract commit.
 - 2026-11-08, after the merge of PR #9: the phone review over the LAN did not work on Anton's Mac (the page on 3001 loaded, the API on 8787 did not, even after `workerd` was allowed in the firewall); Anton reviewed in the laptop's browser and asked to merge. §15 records the open issue and the candidates (a restart after the allow, a second firewall or VPN, the Wi-Fi's client isolation) and the proxy alternative he declined for now. In the post-merge docs commit on `main`.
 - 2026-11-08, after pass 3 (Anton): "why deploy to check a design; check locally first". §15 gained the phone review over the LAN (`pnpm dev:phone`, `scripts/dev-phone.mjs`: the API and the web app bound to the Mac's address, `WEB_ORIGIN` and `NEXT_PUBLIC_API_URL` following it) and the rule that production is deployed only by CI from `main`; CLAUDE.md rule 4, the README's commands, this plan's workflow. In the dev:phone commit.

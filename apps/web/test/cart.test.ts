@@ -10,6 +10,7 @@ import {
   loadCart,
   priceLocally,
   removeLine,
+  removeOne,
   saveCart,
   setPromoCode,
   setQuantity,
@@ -330,5 +331,73 @@ describe("itemQuantity: the sum over every option set of one item (§11.2, §11.
     expect(itemQuantity(TWO_LINES, "chicken-burger")).toBe(2);
     expect(itemQuantity(TWO_LINES, "cola")).toBe(3);
     expect(itemQuantity(TWO_LINES, "fries")).toBe(0);
+  });
+});
+
+// docs/design.md §11.2 `cart.ts` and §11.9: the "−" of a quick-added drink's stepper pill on the grid. A
+// quick-added item only ever has its no-options line; that line loses one, and at 1 it goes. Every cart here
+// is deep-frozen (`cart()`), so mutating the input throws.
+
+describe("removeOne: one fewer of an item's no-options line (§11.2, §11.9)", () => {
+  test("cola ×3 → ×2", () => {
+    expect(removeOne(cart([line("cola", { quantity: 3 })]), "cola")).toEqual({
+      lines: [line("cola", { quantity: 2 })],
+    });
+  });
+
+  test("at quantity 1 the line is removed", () => {
+    const colaAndBurger = cart([line("cola"), line("burger-menu")]);
+    expect(removeOne(colaAndBurger, "cola")).toEqual({ lines: [line("burger-menu")] });
+  });
+
+  test("the last line removed → the empty cart", () => {
+    expect(removeOne(cart([line("water")]), "water")).toEqual(emptyCart());
+  });
+
+  test("no such line → an equal cart", () => {
+    expect(removeOne(BURGER, "cola")).toEqual(BURGER);
+    expect(removeOne(emptyCart(), "cola")).toEqual(emptyCart());
+  });
+
+  test("a line with options is never touched; the same item's no-options line decrements", () => {
+    const mixed = cart([
+      line("chicken-burger", { options: LARGE_GARLIC, quantity: 2 }),
+      line("chicken-burger", { quantity: 3 }),
+    ]);
+    expect(removeOne(mixed, "chicken-burger")).toEqual({
+      lines: [
+        line("chicken-burger", { options: LARGE_GARLIC, quantity: 2 }),
+        line("chicken-burger", { quantity: 2 }),
+      ],
+    });
+  });
+
+  test("only lines with options → an equal cart", () => {
+    expect(removeOne(TWO_LINES, "chicken-burger")).toEqual(TWO_LINES);
+  });
+
+  test("the promo code stays", () => {
+    const coded = cart([line("cola", { quantity: 2 }), line("burger-menu")], "HAHN10");
+    expect(removeOne(coded, "cola")).toEqual({
+      lines: [line("cola"), line("burger-menu")],
+      promoCode: "HAHN10",
+    });
+  });
+
+  test("the other lines stay, in their order", () => {
+    const three = cart([
+      line("burger-menu"),
+      line("cola", { quantity: 2 }),
+      line("fries", { options: ["fries-large"] }),
+    ]);
+    expect(removeOne(three, "cola")).toEqual({
+      lines: [line("burger-menu"), line("cola"), line("fries", { options: ["fries-large"] })],
+    });
+  });
+
+  test("the frozen input is not mutated and comes back unchanged", () => {
+    const input = cart([line("cola", { quantity: 3 })]);
+    removeOne(input, "cola");
+    expect(input).toEqual({ lines: [line("cola", { quantity: 3 })] });
   });
 });

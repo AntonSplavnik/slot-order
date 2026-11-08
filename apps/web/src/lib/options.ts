@@ -52,3 +52,11 @@ export function unitPrice(item: MenuItem, optionIds: readonly string[]): number 
     .reduce((total, o) => total + o.priceDeltaCents, 0);
   return item.priceCents + deltas;
 }
+
+/**
+ * The grey line under a group's name (§11.2, §11.9): `minChoices === maxChoices` → "Choose n";
+ * `minChoices === 0` → "Choose up to n"; otherwise "Pick at least m, up to n".
+ */
+export function groupHint(_group: OptionGroup): string {
+  throw new Error("not implemented");
+}
