@@ -1148,6 +1148,11 @@ with its amber ring and the round cart button as before; the glyph pattern goes.
 each `src` is `/items/<id>.jpg` and the file exists under `apps/web/public`, is a JPEG and within the size limit;
 the cover likewise; `photoFor` of an unknown id is `undefined`; alt texts are non-empty and differ from the item's
 name. The test reads files with Node's `fs`; the library itself does no I/O.
+Decisions from the test agent's report: `photoFor` looks the id up as an own property (`Object.hasOwn`), so
+`"constructor"`, `"toString"` and `"__proto__"` answer `undefined` like any unknown id, and `Object.keys(PHOTOS)` is
+exactly the ten seed ids; `coverPhoto()` answers one shared constant (the test only requires equality); "differs
+from the item's name" is whole-string inequality ignoring case and surrounding spaces (an alt that contains the
+name passes).
 
 ## 12. Errors
 

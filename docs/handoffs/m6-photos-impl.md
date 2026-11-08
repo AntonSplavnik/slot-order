@@ -42,6 +42,17 @@ Make them green without touching them, and restyle the three places that show a 
   and the amber gradient go. Keep the band 260 high and everything else untouched.
 - Formatting: `pnpm format` before `pnpm check`. No new dependencies; no `next/image`.
 
+## From the test agent (the tests are the truth)
+- 9 tests in `apps/web/test/photos.test.ts`. `photoFor` must use an own-property lookup (`Object.hasOwn(PHOTOS, id)
+  ? PHOTOS[id] : undefined`): the tests ask `photoFor("constructor")`, `"toString"` and `"__proto__"` for
+  `undefined`, and `Object.keys(PHOTOS)` must be exactly the ten seed ids.
+- `photoFor(id)` must return the very object stored in `PHOTOS` (`toBe`); `coverPhoto()` may return a shared
+  constant (`toEqual`), with exactly the keys `src` and `alt`.
+- Alt texts: non-empty, at most 120 characters, and not equal to the item's name (case and surrounding spaces
+  ignored); containing the name is fine.
+- The file tests resolve `../public/items/<id>.jpg` from the test file, check the magic bytes `FF D8 FF` and the
+  size limits (items ≤ 122880 bytes, cover ≤ 256000 bytes).
+
 ## Done means
 - `pnpm test` green everywhere (web: 229 + the photo tests), `pnpm typecheck`, `pnpm check`,
   `pnpm --filter @slot-order/web build`, and the OpenNext build (`pnpm --filter @slot-order/web exec

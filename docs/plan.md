@@ -203,8 +203,8 @@ briefs) → `tests written (red)` → `implementation green` → `demo ok, PR op
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
 **Next action:** photo tiles on branch `m6-photos` (Anton approved the mock, 2026-11-08): §11.8 and the stub written,
-the briefs in `docs/handoffs/m6-photos-tests.md` and `m6-photos-impl.md`; the test agent runs, then the red commit,
-the implementer, the checks and renders, PR #10. Anton checks it locally (`pnpm dev`) and merges; CI deploys.
+the briefs in `docs/handoffs/m6-photos-tests.md` and `m6-photos-impl.md`; 9 tests red and committed; the implementer
+runs, then the checks and renders, PR #10. Anton checks it locally (`pnpm dev`) and merges; CI deploys.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -215,7 +215,7 @@ the implementer, the checks and renders, PR #10. Anton checks it locally (`pnpm 
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | **merged** 2026-11-07 (`648edc6`); design passes 2 and 3 **merged** 2026-11-08 (`47f539e`, PR #9: Uber-Eats-style skeleton, then the reference's type, shapes and colours measured from the screenshots, Figtree, the design-skill review; `pnpm dev:phone` for phone reviews); CI deployed both Workers from `main`, live verified | #7, #9 | core 373, web 229, API 287, db 122; README has three "What the agent got wrong" entries  **Photo tiles: contract written** 2026-11-08 (§11.8, branch `m6-photos`), test agent running |
+| M6 | **merged** 2026-11-07 (`648edc6`); design passes 2 and 3 **merged** 2026-11-08 (`47f539e`, PR #9: Uber-Eats-style skeleton, then the reference's type, shapes and colours measured from the screenshots, Figtree, the design-skill review; `pnpm dev:phone` for phone reviews); CI deployed both Workers from `main`, live verified | #7, #9 | core 373, web 229, API 287, db 122; README has three "What the agent got wrong" entries  **Photo tiles: tests written (red)** 2026-11-08 (§11.8, branch `m6-photos`, 9 tests red on the stub), implementer running |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
