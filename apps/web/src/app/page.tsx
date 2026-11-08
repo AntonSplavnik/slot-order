@@ -13,6 +13,7 @@ import { useCart } from "@/components/useCart";
 import { addLine, itemCount, itemQuantity } from "@/lib/cart";
 import { menuSections, type SectionId } from "@/lib/menu";
 import { formatCents } from "@/lib/money";
+import { coverPhoto } from "@/lib/photos";
 
 // `/`, the store page (docs/design.md §11.1, §11.6, §11.7): a cover band, the white card with the name, sticky
 // section tabs with a scroll-spy, each section a two-column grid of item cards (the round button shows the
@@ -24,17 +25,8 @@ const MAX_LINES = 30;
  * a section's top counts as "reached". */
 const STICKY_PX = 112;
 const NOTICE_MS = 2500;
-
-/** The faint pattern of glyphs on the cover band: position, size and tilt of each. */
-const COVER_PATTERN = [
-  { glyph: "🍗", at: "left-[6%] top-[14%] -rotate-12 text-4xl" },
-  { glyph: "🍟", at: "left-[30%] top-[58%] rotate-6 text-3xl" },
-  { glyph: "🍔", at: "left-[70%] top-[10%] rotate-12 text-3xl" },
-  { glyph: "🥤", at: "left-[84%] top-[56%] -rotate-6 text-4xl" },
-  { glyph: "🔥", at: "left-[12%] top-[62%] rotate-12 text-3xl" },
-  { glyph: "🥗", at: "left-[56%] top-[66%] -rotate-12 text-3xl" },
-  { glyph: "🍗", at: "left-[42%] top-[4%] rotate-45 text-3xl" },
-] as const;
+/** The cover band's photo (§11.8). */
+const cover = coverPhoto();
 
 function CartButton({ count }: { count: number }) {
   const badge = (
@@ -184,15 +176,21 @@ export default function MenuPage() {
         </p>
       </div>
 
-      {/* The cover band: a warm gradient, the mark, a faint pattern of the glyphs; no text. */}
-      <div className="relative h-[260px] overflow-hidden bg-linear-to-br from-amber-300 via-amber-500 to-rose-500">
-        <div aria-hidden="true" className="absolute inset-0 opacity-30 select-none">
-          {COVER_PATTERN.map((p) => (
-            <span key={p.at} className={`absolute ${p.at}`}>
-              {p.glyph}
-            </span>
-          ))}
-        </div>
+      {/* The cover band: the cover photo under a soft gradient, the mark; no text. */}
+      <div className="relative h-[260px] overflow-hidden bg-ink">
+        {/* biome-ignore lint/performance/noImgElement: plain files from public/, no image optimiser on the Worker (§11.8) */}
+        <img
+          src={cover.src}
+          alt=""
+          width={1284}
+          height={780}
+          fetchPriority="high"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-linear-to-b from-black/20 via-transparent via-35% to-black/10"
+        />
         <span
           aria-hidden="true"
           className="absolute top-[45%] left-1/2 grid size-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-5xl shadow-lg ring-4 ring-amber-200/70"

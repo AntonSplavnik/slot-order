@@ -1153,6 +1153,14 @@ Decisions from the test agent's report: `photoFor` looks the id up as an own pro
 exactly the ten seed ids; `coverPhoto()` answers one shared constant (the test only requires equality); "differs
 from the item's name" is whole-string inequality ignoring case and surrounding spaces (an alt that contains the
 name passes).
+Decisions of the pass (the implementer's report): Biome's `lint/performance/noImgElement` is silenced on the two
+`<img>` tags with a `biome-ignore` comment (plain files from `public/`, no image optimiser on the Worker); while the
+cover loads the band shows `bg-ink`, and a tile shows its §11.6 colour until its photo arrives; the cover was
+fetched again at 1284 × 780 (133 KB); `OptionSheet` and the checkout needed no change because both render `Tile`;
+the OpenNext build copies `public/items/*` and the `_headers` rule into `.open-next/assets`. Checks: core 373, web
+238, API 287, typecheck, Biome, both builds. Noted, not of this pass: with the Menus heading just in view the
+active tab still reads Drinks, the scroll-spy's threshold (a section becomes active in the top 45 % of the
+viewport, the last one at the page's end).
 
 ## 12. Errors
 
