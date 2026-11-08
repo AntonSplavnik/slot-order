@@ -1,35 +1,104 @@
 "use client";
 
 import type { Cart, Receipt, SlotsResponse } from "@slot-order/core";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, berlinToday, browserStorage, messageOf } from "@/components/browser";
-import { ReceiptView } from "@/components/ReceiptView";
 import {
-  card,
-  cardHeading,
+  CardIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  MinusIcon,
+  PersonIcon,
+  PlusIcon,
+  TagIcon,
+  TrashIcon,
+} from "@/components/icons";
+import { componentsText, optionSummary } from "@/components/menuText";
+import { PageHeader } from "@/components/PageHeader";
+import { ReceiptView } from "@/components/ReceiptView";
+import { Tile, tilePositions } from "@/components/Tile";
+import {
+  errorBox,
   focusRing,
   linkButton,
+  pillButton,
+  pinnedBar,
+  press,
   primaryButton,
-  secondaryButton,
+  sectionBand,
+  sectionHeading,
   textInput,
 } from "@/components/ui";
 import { useCart } from "@/components/useCart";
 import { ApiClientError } from "@/lib/api";
 import { clearCart, itemCount, removeLine, setPromoCode, setQuantity } from "@/lib/cart";
 import { errorText } from "@/lib/errors";
+import { itemById } from "@/lib/menu";
 import { formatCents } from "@/lib/money";
 import { chip, dayLabel, dayStatusText, dayStrip } from "@/lib/slots";
 
-// `/checkout`, slot and pay (docs/design.md §11.1): the lines with steppers, the name, the day strip with each
-// day's status, the chosen day's slots as chips, the promo code through POST /quotes, the receipt, and Pay →
-// POST /orders → Stripe's page.
+// `/checkout`, the cart and the checkout in one page (docs/design.md §11.1, §11.6, §11.7): the X, the big title,
+// the lines as rows with a tile and a stepper pill, rows for the pickup time (the day strip and the slot chips), the name and the promo code
+// (through POST /quotes), the order summary, and the pinned Pay → POST /orders → Stripe's page.
 
 /** `GET /slots` accepts at most 100 items (§10.1 `SlotsQuerySchema`); a bigger cart fails at POST /orders. */
 const MAX_SLOT_QUERY_ITEMS = 100;
 const NAME_MAX = 60;
 
+/** The stepper's round buttons inside the 36 high, 92 wide pill. */
+const stepButton = `grid size-9 place-items-center rounded-full text-ink disabled:text-mute ${press} ${focusRing}`;
+
 type DayResult = { ok: true; slots: SlotsResponse } | { ok: false; error: string };
+type RowId = "time" | "name" | "promo";
+
+/** A row with an icon, a label, the current value and a chevron; its content opens inline below it. The label
+ * carries an id (`row-<id>-label`) so the field inside can be named by it. */
+function ExpandRow({
+  id,
+  icon,
+  label,
+  value,
+  open,
+  onToggle,
+  children,
+}: {
+  id: RowId;
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="border-b border-line last:border-b-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={`row-${id}`}
+        onClick={onToggle}
+        className={`flex w-full items-center gap-4 py-4 text-left ${focusRing}`}
+      >
+        <span className="shrink-0 text-ink">{icon}</span>
+        <span className="min-w-0 flex-1">
+          <span id={`row-${id}-label`} className="block text-body-strong">
+            {label}
+          </span>
+          {value}
+        </span>
+        <ChevronRightIcon className={`size-5 shrink-0 text-chevron ${open ? "rotate-90" : ""}`} />
+      </button>
+      {open && (
+        <div id={`row-${id}`} className="pb-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** The key of a priced cart: a quote answers for exactly this cart. */
 function cartKey(cart: Cart): string {
@@ -51,6 +120,11 @@ export default function CheckoutPage() {
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [openRows, setOpenRows] = useState<Record<RowId, boolean>>({
+    time: true,
+    name: true,
+    promo: false,
+  });
   const slotRequest = useRef(0);
 
   // Today in Berlin, read on the client only (the server render shows the loading state).
@@ -130,14 +204,21 @@ export default function CheckoutPage() {
     };
   }, [cart, setCart]);
 
+  const header = (
+    <>
+      <PageHeader back={{ href: "/", label: "Back to the menu", icon: "close" }} />
+      <h1 className="pt-2 text-title">Checkout</h1>
+    </>
+  );
+
   if (menuError !== null) {
     return (
-      <p
-        role="alert"
-        className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700"
-      >
-        {menuError}
-      </p>
+      <>
+        {header}
+        <p role="alert" className={`${errorBox} mt-4`}>
+          {menuError}
+        </p>
+      </>
     );
   }
   if (
@@ -147,7 +228,12 @@ export default function CheckoutPage() {
     cart.lines.length === 0 ||
     receipt === null
   ) {
-    return <p className="text-stone-500">Loading…</p>;
+    return (
+      <>
+        {header}
+        <p className="pt-4 text-body text-ink-3">Loading…</p>
+      </>
+    );
   }
 
   const hasCode = cart.promoCode !== undefined;
@@ -186,255 +272,337 @@ export default function CheckoutPage() {
     }
   }
 
-  return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight">Checkout</h1>
+  const positions = tilePositions(menu);
+  const chosenSlot =
+    selectedSlot === null || dayResult === undefined || !dayResult.ok
+      ? undefined
+      : dayResult.slots.slots.find((s) => s.start === selectedSlot);
+  const toggle = (row: RowId) => setOpenRows((rows) => ({ ...rows, [row]: !rows[row] }));
+  const promoOpen = openRows.promo || promoError !== null;
 
-      <section aria-labelledby="cart-title" className={card}>
-        <h2 id="cart-title" className={`${cardHeading} px-4 pt-4 pb-1`}>
-          Your order
-        </h2>
-        <ul className="divide-y divide-stone-100">
+  return (
+    <div>
+      {header}
+
+      <section aria-label="Your order" className="pt-2">
+        <ul className="divide-y divide-line">
           {cart.lines.map((line, i) => {
             const priced = receipt.lines[i];
+            const item = itemById(menu, line.itemId);
+            const name = priced?.name ?? line.itemId;
+            const summary =
+              item === undefined
+                ? ""
+                : item.kind === "combo"
+                  ? componentsText(menu, item)
+                  : optionSummary(item, line.optionIds);
             return (
               <li
                 key={`${line.itemId}-${line.optionIds.join(",")}`}
-                className="flex items-start gap-3 px-4 py-3"
+                className="flex items-start gap-4 py-4"
               >
+                {item !== undefined ? (
+                  <Tile item={item} index={positions.get(item.id) ?? i} size="line" />
+                ) : (
+                  <span aria-hidden="true" className="size-18 shrink-0 rounded-xl bg-well" />
+                )}
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{priced?.name ?? line.itemId}</p>
-                  {priced !== undefined && priced.optionNames.length > 0 && (
-                    <p className="text-sm text-stone-600">{priced.optionNames.join(", ")}</p>
+                  <p className="text-body-strong">{name}</p>
+                  {priced !== undefined && (
+                    <p className="mt-0.5 text-body-sm text-ink-3 tabular-nums">
+                      {formatCents(priced.lineGrossCents)}
+                    </p>
                   )}
+                  {summary !== "" && (
+                    <p className="mt-0.5 text-body-sm break-words text-ink-3">{summary}</p>
+                  )}
+                </div>
+                <div className="mt-1 inline-flex h-9 w-[92px] shrink-0 items-center justify-between rounded-full bg-well">
+                  {line.quantity <= 1 ? (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${name} from the cart`}
+                      onClick={() => setCart(removeLine(cart, i))}
+                      className={stepButton}
+                    >
+                      <TrashIcon className="size-5" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Remove one"
+                      onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
+                      className={stepButton}
+                    >
+                      <MinusIcon className="size-5" />
+                    </button>
+                  )}
+                  <span className="text-body-strong tabular-nums">{line.quantity}</span>
                   <button
                     type="button"
-                    onClick={() => setCart(removeLine(cart, i))}
-                    className={`-ml-1 mt-0.5 rounded-md px-1 py-1.5 text-sm text-stone-500 underline underline-offset-2 hover:text-red-700 ${focusRing}`}
+                    aria-label="Add one"
+                    disabled={line.quantity >= 20}
+                    onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
+                    className={stepButton}
                   >
-                    Remove
+                    <PlusIcon className="size-5" />
                   </button>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  {priced !== undefined && (
-                    <span className="font-medium tabular-nums">
-                      {formatCents(priced.lineGrossCents)}
-                    </span>
-                  )}
-                  <div className="flex items-center rounded-full border border-stone-300 bg-white">
-                    <button
-                      type="button"
-                      aria-label="One less"
-                      onClick={() => setCart(setQuantity(cart, i, line.quantity - 1))}
-                      className={`grid size-11 place-items-center rounded-full text-lg text-stone-700 enabled:hover:bg-stone-100 ${focusRing}`}
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center font-medium tabular-nums">
-                      {line.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="One more"
-                      disabled={line.quantity >= 20}
-                      onClick={() => setCart(setQuantity(cart, i, line.quantity + 1))}
-                      className={`grid size-11 place-items-center rounded-full text-lg text-stone-700 enabled:hover:bg-stone-100 disabled:text-stone-300 ${focusRing}`}
-                    >
-                      +
-                    </button>
-                  </div>
                 </div>
               </li>
             );
           })}
         </ul>
-      </section>
-
-      <section aria-labelledby="name-title" className={`${card} space-y-2 p-4`}>
-        <h2 className={cardHeading}>
-          <label id="name-title" htmlFor="customer-name">
-            Your name
-          </label>
-        </h2>
-        <input
-          id="customer-name"
-          type="text"
-          autoComplete="given-name"
-          maxLength={NAME_MAX}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="For the counter"
-          className={textInput}
-        />
-      </section>
-
-      <section aria-labelledby="slot-title" className={`${card} space-y-4 py-4`}>
-        <h2 id="slot-title" className={`${cardHeading} px-4`}>
-          Pickup time
-        </h2>
-        <div className="flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-          {dayStrip(today).map((day) => {
-            const result = days[day];
-            const status = result?.ok === true ? result.slots.status : undefined;
-            const open = status === "open";
-            const active = day === selectedDay;
-            return (
-              <button
-                key={day}
-                type="button"
-                disabled={!open}
-                aria-pressed={active && open}
-                onClick={() => {
-                  setSelectedDay(day);
-                  setSelectedSlot(null);
-                }}
-                className={`flex min-h-14 min-w-22 shrink-0 flex-col items-center justify-center rounded-2xl border px-3 py-2 text-sm transition-colors ${
-                  active && open
-                    ? "border-orange-600 bg-orange-600 text-white"
-                    : "border-stone-200 bg-white enabled:hover:border-stone-400"
-                } disabled:border-stone-100 disabled:bg-stone-100 disabled:text-stone-400 ${focusRing}`}
-              >
-                <span className="font-medium whitespace-nowrap">{dayLabel(day, today)}</span>
-                <span className="text-xs">
-                  {result === undefined ? "…" : status === undefined ? "–" : dayStatusText(status)}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="px-4">
-          {dayResult === undefined ? (
-            <p className="text-sm text-stone-500">Loading the slots…</p>
-          ) : !dayResult.ok ? (
-            <p className="text-sm text-red-700">{dayResult.error}</p>
-          ) : dayResult.slots.status !== "open" ? (
-            <p className="text-sm text-stone-500">No pickup on this day.</p>
-          ) : dayResult.slots.slots.length === 0 ? (
-            <p className="text-sm text-stone-500">No slots on this day.</p>
-          ) : (
-            <div className="grid grid-cols-4 gap-2">
-              {dayResult.slots.slots.map((slot) => {
-                const view = chip(slot);
-                const active = slot.start === selectedSlot;
-                return (
-                  <button
-                    key={slot.start}
-                    type="button"
-                    disabled={view.disabled}
-                    aria-pressed={active}
-                    title={view.hint ?? undefined}
-                    onClick={() => setSelectedSlot(slot.start)}
-                    className={`flex min-h-11 flex-col items-center justify-center rounded-xl border px-1 py-2 text-sm tabular-nums transition-colors ${
-                      active
-                        ? "border-orange-600 bg-orange-600 text-white"
-                        : "border-stone-200 bg-white enabled:hover:border-orange-600 enabled:hover:text-orange-700"
-                    } disabled:cursor-not-allowed disabled:border-stone-100 disabled:bg-stone-50 disabled:text-stone-400 ${focusRing}`}
-                  >
-                    <span className="font-medium">{view.label}</span>
-                    {view.hint !== null && (
-                      <span className="text-[10px] leading-tight">{view.hint}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        <div className="flex justify-end pb-4">
+          <Link href="/" className={pillButton}>
+            <PlusIcon className="size-4" />
+            Add items
+          </Link>
         </div>
       </section>
 
-      <section aria-labelledby="promo-title" className={`${card} space-y-2 p-4`}>
-        <h2 id="promo-title" className={cardHeading}>
-          Promo code
-        </h2>
-        {hasCode ? (
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center rounded-full bg-orange-50 px-3 py-1 font-mono text-sm font-medium text-orange-700 ring-1 ring-orange-200">
-              {cart.promoCode}
+      <div className={sectionBand} />
+
+      <section aria-label="Pickup details">
+        <ExpandRow
+          id="time"
+          icon={<ClockIcon className="size-6" />}
+          label="Pickup time"
+          open={openRows.time}
+          onToggle={() => toggle("time")}
+          value={
+            <span className="block text-body-sm text-ink-2">
+              {chosenSlot !== undefined && selectedDay !== null
+                ? `${dayLabel(selectedDay, today)} • ${chosenSlot.label}`
+                : "Choose a slot"}
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                setPromoInput("");
-                setCart(setPromoCode(cart, ""));
-              }}
-              className={linkButton}
-            >
-              Remove
-            </button>
+          }
+        >
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+            {dayStrip(today).map((day) => {
+              const result = days[day];
+              const status = result?.ok === true ? result.slots.status : undefined;
+              const open = status === "open";
+              const active = day === selectedDay;
+              const word =
+                result === undefined
+                  ? "…"
+                  : status === undefined
+                    ? "–"
+                    : status === "open"
+                      ? ""
+                      : dayStatusText(status);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  disabled={!open}
+                  aria-pressed={active && open}
+                  onClick={() => {
+                    setSelectedDay(day);
+                    setSelectedSlot(null);
+                  }}
+                  className={`inline-flex h-9 shrink-0 items-center rounded-full px-3 text-label whitespace-nowrap ${
+                    active && open
+                      ? "bg-ink text-white"
+                      : "bg-well text-ink not-disabled:hover:bg-tag"
+                  } disabled:cursor-not-allowed disabled:text-chevron ${press} ${focusRing}`}
+                >
+                  {dayLabel(day, today)}
+                  {word !== "" && ` • ${word}`}
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <form
-            className="flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setPromoError(null);
-              setCart(setPromoCode(cart, promoInput));
-            }}
-          >
-            <input
-              type="text"
-              aria-label="Promo code"
-              autoCapitalize="characters"
-              value={promoInput}
-              onChange={(event) => setPromoInput(event.target.value)}
-              className={`${textInput} min-w-0 flex-1 uppercase`}
-            />
-            <button
-              type="submit"
-              disabled={promoInput.trim() === ""}
-              className={`${secondaryButton} shrink-0`}
+
+          <div className="mt-3">
+            {dayResult === undefined ? (
+              <p className="text-body-sm text-ink-3">Loading the slots…</p>
+            ) : !dayResult.ok ? (
+              <p className="text-body-sm text-negative">{dayResult.error}</p>
+            ) : dayResult.slots.status !== "open" ? (
+              <p className="text-body-sm text-ink-3">No pickup on this day.</p>
+            ) : dayResult.slots.slots.length === 0 ? (
+              <p className="text-body-sm text-ink-3">No slots on this day.</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2">
+                {dayResult.slots.slots.map((slot) => {
+                  const view = chip(slot);
+                  const active = slot.start === selectedSlot;
+                  return (
+                    <button
+                      key={slot.start}
+                      type="button"
+                      disabled={view.disabled}
+                      aria-pressed={active}
+                      title={view.hint ?? undefined}
+                      onClick={() => setSelectedSlot(slot.start)}
+                      className={`flex min-h-12 flex-col items-center justify-center rounded-lg border bg-white px-1 py-1.5 text-label tabular-nums ${
+                        active
+                          ? "border-ink ring-1 ring-ink ring-inset"
+                          : "border-line not-disabled:hover:border-ink"
+                      } disabled:cursor-not-allowed disabled:border-well disabled:bg-well disabled:text-chevron ${press} ${focusRing}`}
+                    >
+                      <span>{view.label}</span>
+                      {view.hint !== null && <span className="text-caption">{view.hint}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </ExpandRow>
+
+        <ExpandRow
+          id="name"
+          icon={<PersonIcon className="size-6" />}
+          label="Your name"
+          open={openRows.name}
+          onToggle={() => toggle("name")}
+          value={
+            <span className="block text-body-sm break-words text-ink-2">
+              {trimmedName === "" ? "For the counter" : trimmedName}
+            </span>
+          }
+        >
+          <input
+            id="customer-name"
+            name="name"
+            type="text"
+            aria-labelledby="row-name-label"
+            autoComplete="given-name"
+            enterKeyHint="next"
+            maxLength={NAME_MAX}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="For the counter"
+            className={textInput}
+          />
+        </ExpandRow>
+
+        <ExpandRow
+          id="promo"
+          icon={<TagIcon className="size-6" />}
+          label="Promo code"
+          open={promoOpen}
+          onToggle={() => toggle("promo")}
+          value={
+            hasCode ? (
+              <span className="block text-label text-green-text">{cart.promoCode} applied</span>
+            ) : (
+              <span className="block text-body-sm text-ink-2">Add a code</span>
+            )
+          }
+        >
+          {hasCode ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-label text-green-text">Code {cart.promoCode} is applied.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPromoInput("");
+                  setCart(setPromoCode(cart, ""));
+                }}
+                className={linkButton}
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setPromoError(null);
+                setCart(setPromoCode(cart, promoInput));
+              }}
             >
-              Apply
-            </button>
-          </form>
-        )}
-        {promoError !== null && <p className="text-sm text-red-700">{promoError}</p>}
+              <input
+                id="promo-code"
+                name="promo"
+                type="text"
+                aria-labelledby="row-promo-label"
+                aria-invalid={promoError !== null ? true : undefined}
+                aria-describedby={promoError !== null ? "promo-error" : undefined}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                autoComplete="off"
+                spellCheck={false}
+                enterKeyHint="done"
+                value={promoInput}
+                onChange={(event) => setPromoInput(event.target.value)}
+                placeholder="Code"
+                className={`${textInput} min-w-0 flex-1 uppercase`}
+              />
+              <button
+                type="submit"
+                disabled={promoInput.trim() === ""}
+                className={`inline-flex h-12 shrink-0 items-center rounded-lg bg-well px-4 text-label text-ink not-disabled:hover:bg-tag disabled:cursor-not-allowed disabled:text-disabled-text ${press} ${focusRing}`}
+              >
+                Apply
+              </button>
+            </form>
+          )}
+          {promoError !== null && (
+            <p id="promo-error" className="mt-2 text-body-sm text-negative">
+              {promoError}
+            </p>
+          )}
+        </ExpandRow>
       </section>
 
-      <section aria-labelledby="receipt-title" className={`${card} space-y-3 p-4`}>
-        <h2 id="receipt-title" className={cardHeading}>
-          Receipt
+      <div className={sectionBand} />
+
+      <section aria-labelledby="summary-title" className="py-4">
+        <h2 id="summary-title" className={`mb-2 ${sectionHeading}`}>
+          Order summary
         </h2>
         {shown !== null ? (
           <ReceiptView receipt={shown} />
         ) : (
-          <p className="text-sm text-stone-500">{quoteError ?? "Applying the code…"}</p>
+          <p className="text-body-sm text-ink-3">{quoteError ?? "Applying the code…"}</p>
         )}
       </section>
 
-      <div className="space-y-3 pt-1">
-        {payError !== null && (
-          <p
-            role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-          >
-            {payError}
-          </p>
-        )}
+      <div className={sectionBand} />
 
-        <button
-          type="button"
-          disabled={!canPay}
-          onClick={() => void pay()}
-          className={`${primaryButton} w-full text-lg`}
-        >
-          {paying ? (
-            "Starting payment…"
-          ) : (
-            <span>
-              Pay
-              {shown !== null && (
-                <span className="tabular-nums"> {formatCents(shown.totalCents)}</span>
-              )}
-            </span>
+      <div className="flex items-center gap-4 py-4">
+        <CardIcon className="size-6 shrink-0" />
+        <p className="min-w-0">
+          <span className="block text-body-strong">Pay by card with Stripe</span>
+          <span className="block text-body-sm text-ink-2">test mode</span>
+        </p>
+      </div>
+
+      <div className={pinnedBar}>
+        <div className="mx-auto max-w-md space-y-2">
+          {payError !== null && (
+            <p role="alert" className={errorBox}>
+              {payError}
+            </p>
           )}
-        </button>
-        {!canPay && !paying && (
-          <p className="text-center text-sm text-stone-500">
-            {!nameValid ? "Enter your name" : selectedSlot === null ? "Choose a pickup time" : ""}
-          </p>
-        )}
+          {payError === null && !canPay && !paying && (
+            <p className="text-center text-body-sm text-ink-3">
+              {!nameValid ? "Enter your name" : selectedSlot === null ? "Choose a pickup time" : ""}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!canPay}
+            onClick={() => void pay()}
+            className={`${primaryButton} w-full`}
+          >
+            {paying ? (
+              "Starting payment…"
+            ) : (
+              <span>
+                Pay
+                {shown !== null && (
+                  <span className="tabular-nums"> • {formatCents(shown.totalCents)}</span>
+                )}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

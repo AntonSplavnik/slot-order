@@ -1,31 +1,64 @@
-// The look shared by the screens (docs/design.md §11.1: Tailwind defaults and one accent, orange-600). Class
-// strings only: no behaviour lives here.
+// The look shared by the screens (docs/design.md §11.6 structure, §11.7 tokens: white surfaces, `ink` primaries,
+// `well` greys, `line` hairlines, the named type scale). Class strings only: no behaviour lives here.
 
 const focus =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2";
 
-const button = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
+/** Press feedback on every pressable (§11.7 Motion): a 150 ms ease-out scale to 0.97, never on a disabled one. */
+export const press = "transition-transform duration-150 ease-out not-disabled:active:scale-[0.97]";
 
-/** The one action of a screen or card. */
-export const primaryButton = `${button} bg-orange-600 text-white enabled:hover:bg-orange-700 enabled:active:bg-orange-800`;
+const button = `inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed ${press} ${focus}`;
 
-/** A second, quieter action. */
-export const secondaryButton = `${button} border border-stone-300 bg-white text-stone-900 enabled:hover:bg-stone-50 enabled:active:bg-stone-100`;
+/** The one action of a screen: 56 high, radius 8, `ink`, the label 18/24 500. */
+export const primaryButton = `${button} h-14 rounded-lg px-5 bg-ink text-label-lg text-white disabled:bg-disabled disabled:text-disabled-text`;
 
-/** A small primary for rows (the staff board). */
-export const smallPrimaryButton = `inline-flex min-h-11 items-center justify-center rounded-xl bg-orange-600 px-3 py-2 text-sm font-medium text-white transition-colors enabled:hover:bg-orange-700 enabled:active:bg-orange-800 disabled:cursor-not-allowed disabled:opacity-50 ${focus}`;
+/** A second, quieter action: the primary's shape in `well`. */
+export const secondaryButton = `${button} h-14 rounded-lg px-5 bg-well text-label-lg text-ink not-disabled:hover:bg-tag disabled:text-disabled-text`;
+
+/** A small primary for rows (the staff board): 40 high, radius 8, 14/20 500. */
+export const smallPrimaryButton = `${button} h-10 rounded-lg px-3 bg-ink text-label text-white disabled:bg-disabled disabled:text-disabled-text`;
+
+/** A small secondary for rows (the staff board). */
+export const smallSecondaryButton = `${button} h-10 rounded-lg px-3 bg-well text-label text-ink not-disabled:hover:bg-tag disabled:text-disabled-text`;
 
 /** A text link styled as a quiet button. */
-export const linkButton = `inline-flex min-h-11 items-center rounded-lg text-sm font-medium text-stone-600 underline-offset-4 hover:text-stone-900 hover:underline ${focus}`;
+export const linkButton = `inline-flex min-h-11 items-center rounded-lg text-label text-ink underline underline-offset-4 hover:text-ink-2 ${press} ${focus}`;
 
-/** A rounded white card. */
-export const card = "rounded-2xl border border-stone-200 bg-white";
+/** A grey pill (Add items, Refresh): 36 high, `well`, padding 0 16, 14/20 500. */
+export const pillButton = `inline-flex h-9 items-center gap-1.5 rounded-full bg-well px-4 text-label text-ink hover:bg-tag ${press} ${focus}`;
 
-/** A labelled text input (text-base keeps iOS from zooming in). */
+/** A round white button with a soft shadow (over tiles, the cover and the sheet's hero). */
+export const roundButton = `grid place-items-center rounded-full bg-white text-ink shadow-[0_1px_6px_rgba(0,0,0,0.18)] ${press} ${focus}`;
+
+/** A white card with a hairline border, radius 12. */
+export const card = "rounded-xl border border-line bg-white";
+
+/** A text input: 48 high, radius 8, `well`, 16/20 (16 px keeps iOS from zooming in), a 2 px `ink` ring inside
+ * when focused. */
 export const textInput =
-  "min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-400 transition-colors focus:border-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-600/30";
+  "h-12 w-full rounded-lg bg-well px-4 text-body text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-ink focus:ring-inset";
 
-/** A section heading inside a card. */
-export const cardHeading = "text-lg font-semibold";
+/** A section heading, 20/24 700. */
+export const sectionHeading = "text-heading";
+
+/** The green tag ("Popular", "Ready"): 20 high, radius 4, 12/16 500 white. */
+export const greenTag =
+  "inline-flex h-5 items-center rounded bg-green px-1.5 text-caption-strong text-white";
+
+/** The tag shape of Required / Optional and the staff status tags: 24 high, radius 6, 14/20 500. */
+export const tagShape = "inline-flex h-6 items-center rounded-md px-2 text-label";
+
+/** The grey tag ("Required", "Optional"). */
+export const greyTag = `${tagShape} bg-tag text-ink`;
+
+/** An inline error box. */
+export const errorBox = "rounded-lg bg-negative-soft px-4 py-3 text-body-sm text-negative";
+
+/** The 4 px band between page sections, full bleed, as the reference separates them. */
+export const sectionBand = "-mx-4 h-1 bg-line-2";
+
+/** The container of a button pinned to the bottom of the screen: white, padding 12 16 and the safe area. */
+export const pinnedBar =
+  "fixed inset-x-0 bottom-0 z-20 bg-white px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]";
 
 export { focus as focusRing };
