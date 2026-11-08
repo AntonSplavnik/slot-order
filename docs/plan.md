@@ -198,10 +198,12 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** design pass 3 on branch `m6-design` (PR #9): §11.7 written, the `itemQuantity` tests red (4 of 229
-web tests), the brief `docs/handoffs/m6-web-design3.md` written; the implementer agent (Opus 5.5, high) is restyling
-the screens. Then: the checks, headless renders beside the reference, the spec's decisions, the README's third
-"What the agent got wrong" entry, the commit on `m6-design`, Anton's hand deploy for the phone look, his merge.
+**Next action:** design pass 3 on branch `m6-design` (PR #9): §11.7 written and reviewed against the design skills
+Anton installed (`better-*`, `emil-design-eng`, `mobile-native`: one colour pair replaced, truncation, sheet focus,
+the mobile baseline, motion and names written into §11.7), the `itemQuantity` tests red (4 of 229 web tests), the
+brief `docs/handoffs/m6-web-design3.md`; the implementer agent (Opus 5.5, high) is restyling the screens. Then: the
+checks, headless renders beside the reference, the spec's decisions, the README's third "What the agent got wrong"
+entry, the commit on `m6-design`, Anton's hand deploy for the phone look, his merge.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -216,6 +218,7 @@ the screens. Then: the checks, headless renders beside the reference, the spec's
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-08, M6 (design pass 3, before the implementation): Anton installed design skills and asked for the design to be checked with them first. §11.7 gained the review paragraph: `negative` `#E11900` → `#AB1300` (4.34:1 on the soft red failed 1.4.3; now 6.66), the type scale as named `@theme` utilities with unitless line-heights, no truncation on the staff name and the cart's option summary (a trigger: no way back to the text), focus management and `inert` for the item sheet, the mobile baseline (`viewportFit: "cover"`: without it every safe-area inset was 0), press feedback and the sheet's drawer curve under `motion-safe:`, action-and-object accessible names, labelled inputs. §16: the reference's always-enabled Add button (validate on submit) noted as a later behaviour change. In the pass-3 review commit.
 - 2026-11-08, M6 (Anton's third review): the look after pass 2 still did not match the reference ("too simple"; the structure right). §11.7 added with the design tokens measured pixel by pixel from the 23 screenshots (colours as sampled, the type scale from cap heights, shapes from scan lines: 56 px buttons with radius 8, square tiles with radius 12, 36 px pills, 5 px tab track, 24 px card corners, 4 px bands), Figtree chosen over three other open typefaces as the nearest to Uber Move (proprietary, so "exact" means the closest open font); §11.2 `itemQuantity` (the tile's round button shows the cart quantity, as the reference does); §11.3 the font through `next/font/google`; §11.4 its test; §11's look line. In the pass-3 contract commit.
 - 2026-11-08, M6 (Anton's second review): the look after the first polish still fell short; Anton set Uber Eats' standardized store layout as the reference and chose coloured tiles over photos. §11's "no design system" line replaced by the reference and its rules; §11.6 added. The reference screenshots stay outside git (`reference/`, ignored): layout only, no content of theirs. In the design-pass PR.
 - 2026-11-07, after the M6 merge: the first CI run on `main` deployed the migrations and the API and failed at the web step: `pnpm --filter @slot-order/web deploy` is pnpm's built-in `deploy` command, not the package script; `run deploy` (§14, the CI step, the docs). Caught by CI, not by a review; the live web Worker was the hand deploy of the same commit. PR `fix-ci-web-deploy`.

@@ -920,7 +920,7 @@ says. Prices and codes always `tabular-nums`.
 | `mute` | `#C4C4C4` | a disabled glyph (the stepper's "−" at quantity 1) |
 | `chevron` | `#AFAFAF` | row chevrons, disabled text on chips (Uber Base gray400; sampled `#AAAAAA` on a 1.5 px stroke) |
 | `disabled` / `disabled-text` | `#E2E2E2` / `#AFAFAF` | a disabled primary button (not in the screenshots: Uber Base's values) |
-| `negative` / `negative-soft` | `#E11900` / `#FFEFED` | error text and its box, the "Cancelled" tag (not in the screenshots: Uber Base's values) |
+| `negative` / `negative-soft` | `#AB1300` / `#FFEFED` | error text and its box, the "Cancelled" tag (not in the screenshots: Uber Base's red500 and red50; red400 `#E11900` was measured at 4.34:1 on the soft red and dropped) |
 
 White surfaces everywhere; the item tiles keep §11.6's six warm backgrounds (the reference's photos are the other
 restaurant's content).
@@ -941,6 +941,13 @@ restaurant's content).
 | 12/16 500 | the Popular tag, the small label under a value in the info boxes, the footer's Staff link |
 | 12/16 400 | the footer note, captions |
 | 32/36 700, `tracking-[0.12em]` | the pickup code on the status and check-in pages |
+
+The scale is defined once in `globals.css` under `@theme` as named text utilities with **unitless** line-heights
+(`--text-title: 1.5rem; --text-title--line-height: 1.1667; --text-title--font-weight: 700; …`), so a role is one
+class: `text-title` (24/28 700), `text-heading` (20/24 700), `text-price-lg` (20/24 500), `text-label-lg` (18/24
+500), `text-total` (18/24 700), `text-body-strong` (16/20 500), `text-body` (16/20 400), `text-body-sm` (14/20
+400), `text-label` (14/20 500), `text-caption-strong` (12/16 500), `text-caption` (12/16 400), `text-code` (32/36
+700). Sizes in `rem`, tracking in `em`.
 
 **Shapes** (CSS px):
 - Page: white, side margin 16; the content column `max-w-md` as before.
@@ -1018,6 +1025,51 @@ restaurant's content).
 - Icons: inline SVGs, 24 viewBox, stroke 2, round caps (unchanged); new ones allowed: trash, search, tag, card,
   check, list.
 - Footer: 12/16 400 `ink-3`; the Staff link 12/16 500 `ink`, underlined on hover.
+
+**Review against the design skills (2026-11-08, before the implementation).** Anton installed the `better-*`,
+`emil-design-eng` and `mobile-native` skills; §11.7 and the pass-2 screens were checked against them (colours
+measured with WCAG 2.x luminance; keyboard, forms and motion read from the source; nothing rendered yet, so
+runtime checks are the implementer's). What changed or is required because of it:
+- *Contrast (1.4.3), measured:* every text pair passes 4.5:1 — `ink-3` on white 5.33, on `well` 4.93; `ink-2`
+  7.81; white on `green` 5.02 (the 12 px Popular tag); `green-soft-text` on `green-soft` 5.83; `green-text` 7.41;
+  `ink` on `tag` 15.98; `negative` `#AB1300` on `negative-soft` 6.66 (the first choice `#E11900` failed at 4.34
+  and was replaced). Exempt and known: disabled pairs (`disabled-text` on `disabled` 1.69, `chevron` on `well`
+  2.03, `mute` on `well` 1.61); the `chevron` glyph on white at 2.19 is a redundant affordance beside a tappable
+  row; the `well` input boundary against white (1.08) and hairlines (1.27) are the reference's look and fall
+  short of 1.4.11 for a boundary — kept, with the label, the placeholder and the 2 px `ink` focus ring
+  identifying each field.
+- *Truncation with no way back (a `better-interface` trigger):* the staff board's `truncate` on the customer
+  name and the cart line's `truncate` on the option summary go; both wrap. The grid's `line-clamp-2` on names and
+  descriptions stays because the sheet shows the full text. Page header titles are short constants.
+- *Dialog focus (2.4.3):* the item sheet moves focus to its close button on open, marks the page behind it
+  `inert` (React 19 supports the attribute) and returns focus to the element that opened it on close; Escape and
+  the backdrop keep closing it. The polite live region for the quantity stays.
+- *Hit areas (2.5.8):* the 36 px round button, stepper buttons and chips are above the 24 px minimum; the X and
+  back controls sit in 44 × 44 hit areas; the 18 px radios and checkboxes are inside 72 px rows that are the
+  target.
+- *Mobile baseline (`mobile-native`):* the viewport export gains `viewportFit: "cover"` (without it every
+  `env(safe-area-inset-*)` is 0) and `interactiveWidget: "resizes-content"`; `html` gets
+  `-webkit-tap-highlight-color: transparent` and `-webkit-text-size-adjust: 100%`; buttons, links and chips get
+  `touch-action: manipulation` and `user-select: none` (never the body); the sheet's scroll area
+  `overscroll-behavior: contain`; inputs stay 16 px; Tailwind 4's `hover:` is already gated by `(hover: hover)`.
+- *Motion (`emil-design-eng`):* every pressable gets `active:scale-[0.97]` with `transition-transform
+  duration-150 ease-out` (the round buttons too, replacing `scale-95`); the sheet slides up over 300 ms on the
+  drawer curve `cubic-bezier(0.32, 0.72, 0, 1)` and its backdrop fades over 200 ms, both only under
+  `motion-safe:` (a plain fade under reduced motion); the toast fades in over 200 ms (opacity only); no
+  `transition-all`, nothing over 300 ms, no animation on keyboard-driven changes.
+- *Writing:* icon-only names say the action and the object: "Close item" (the sheet), "Back to the menu" and
+  "Back to the board" (the arrows), "Remove one" / "Add one" (steppers), "Remove <item> from the cart". Labels in
+  sentence case; separators are the bullet "•" with spaces, never a hyphen or a middle dot; the ellipsis is "…".
+  The `errorText` strings are pinned by tests and stay (their recovery is on screen: the slots reload, the code
+  field stays focused).
+- *Forms:* the name and promo inputs get visible `<label>`s (the row titles) bound with `htmlFor`, plus
+  `enterKeyHint` ("next" / "done") and, on code fields, `autoCapitalize="characters"`, `autoCorrect="off"`,
+  `spellCheck={false}`. Submit buttons disabled until valid is pre-existing behaviour (§11.1, §11.5) and stays
+  in this pass; the reference keeps its button enabled and scrolls to the missing group, noted in §16.
+- *Typography:* the type scale above is the fix for fixed `rem` line-heights and ad-hoc sizes (`text-[15px]`,
+  `leading-snug`, `tracking-tight`); weights never below 400; `tabular-nums` on prices, counts and codes.
+- Not reviewed: `better-ui` is not installed (visual polish and motion were taken from `emil-design-eng` and
+  `mobile-native` instead); `interface-review` (change-scoped) was not run.
 
 **Decisions.** The exact font is unavailable, so "exact" means the closest open typeface, chosen on a rendered
 comparison and recorded here. Four values are Uber Base's rather than sampled (disabled and negative colours,
@@ -1120,6 +1172,9 @@ git-ignored; nothing in the committed repo names the company this was written fo
 - Refund UI; order edits; a customer "cancel while held" button.
 - Rate limiting on `POST /orders`; observability beyond Workers logs.
 - German UI; receipts by email.
+- The reference keeps "Add to cart" enabled while a required option group is unchosen and scrolls to that group on
+  tap (validate on submit, as `better-accessibility` prefers); ours disables the button until the selection is
+  valid (§11.1). A behaviour change, so not part of the design passes.
 - Small UI behaviours left out of the M6 polish pass on purpose (each changes what a screen does): the option
   sheet closing on Escape and locking the page's scroll; hiding today's slots that have already started (late in
   the day every past chip says "Already started"); a status word for an open day with no bookable slot left

@@ -22,6 +22,20 @@ level (`itemQuantity`, below).
   time-option cards, Order summary, Next); 5784 a payment sheet.
 - The font comparison that chose Figtree: `…/scratchpad/fonts/words_compare.png`.
 
+## The design-skill review (read with §11.7)
+Anton installed design skills into Claude Code; §11.7's paragraph "Review against the design skills" lists what
+they changed: `negative` is `#AB1300`; the type scale is a set of named `@theme` text utilities with unitless
+line-heights (`text-title`, `text-heading`, …) that you define and use instead of `text-2xl leading-7`; the
+staff name and the cart line's option summary wrap (no `truncate`); the sheet manages focus (focus the close
+button on open, `inert` on the page behind, restore focus on close); the mobile baseline (`viewportFit: "cover"`
+and `interactiveWidget: "resizes-content"` in `layout.tsx`'s viewport export, tap highlight off, `touch-action:
+manipulation` and `user-select: none` on controls, `overscroll-behavior: contain` on the sheet's scroller);
+press feedback `active:scale-[0.97]` with a 150 ms ease-out transform transition on every pressable; the sheet's
+300 ms drawer curve under `motion-safe:`; the accessible names and form attributes it lists. At the start of
+your work invoke the skills `emil-design-eng`, `mobile-native` and `better-accessibility` (the Skill tool) and
+apply them within §11.7's limits: they refine, §11.7 decides. Do not add behaviour they suggest (an exit
+animation needs state; keep the sheet unmounting at once; keep the buttons disabled until valid).
+
 ## Read first
 - `docs/design.md` §11 (the intro), §11.1, §11.6 (the structure, kept), **§11.7 (this pass; read it twice)**,
   §11.2 `cart.ts` (`itemQuantity`), §11.3 (the font), §3 rows "Staff" and "Pickup code".
@@ -38,8 +52,9 @@ Nothing else: no test files, no configs, no `package.json`, no `next.config.ts`,
 ## You must not
 - Change behaviour: the same API calls, texts from `src/lib/` (`statusView`, `errorText`, `chip`, `dayLabel`,
   `dayStatusText`, `formatCents`), storage keys, polling and refresh intervals, routes, the cart's rules, the
-  sheet's stepper (1–20, `addLine` n times), the scroll-spy, Escape closing the sheet. The only addition: the
-  tile's round button shows `itemQuantity(cart, item.id)` instead of the plus when it is above 0 (§11.7).
+  sheet's stepper (1–20, `addLine` n times), the scroll-spy, Escape closing the sheet. The only additions: the
+  tile's round button shows `itemQuantity(cart, item.id)` instead of the plus when it is above 0 (§11.7), and the
+  sheet's focus management (focus in, `inert` behind, focus restored).
 - Add dependencies. The font comes through `next/font/google` (built into Next): `Figtree` with weights
   `["400", "500", "700"]`, `subsets: ["latin"]`, `display: "swap"`, `variable: "--font-figtree"`, on `<html>`;
   in `globals.css` `@theme { --font-sans: var(--font-figtree), system-ui, sans-serif; … }` so Tailwind's `font-sans`
@@ -105,8 +120,8 @@ Nothing else: no test files, no configs, no `package.json`, no `next.config.ts`,
 - `pnpm test` (all packages; the `itemQuantity` tests now green, 225 + 4 = 229 web tests), `pnpm typecheck`,
   `pnpm check` (run `pnpm format` first), `pnpm --filter @slot-order/web build` green, and the OpenNext build
   (`pnpm --filter @slot-order/web exec opennextjs-cloudflare build`) produces `.open-next/worker.js`.
-- `grep -rn "neutral-\|green-700\|red-50\|red-700\|font-mono\|orange-" apps/web/src` finds nothing (except the
-  tile palette in `tiles.ts`).
+- `grep -rn "neutral-\|green-700\|red-50\|red-700\|font-mono\|orange-\|truncate\|transition-all\|leading-tight\|leading-snug\|tracking-tight\|text-\[1" apps/web/src`
+  finds nothing (except the tile palette in `tiles.ts`), and `grep -rn "text-2xl\|text-xl\|text-lg\|text-sm\|text-xs\|text-base" apps/web/src` finds nothing: every text style is one of §11.7's named utilities.
 - Render every screen at 390 × 844 with headless Chrome (`"/Applications/Google Chrome.app/Contents/MacOS/Google
   Chrome" --headless=new --screenshot=… --window-size=390,844 --force-device-scale-factor=2 <url>`), against
   `next dev -p 3001` (port 3000 is taken) and the local API (`supabase start` is running; `pnpm --filter
