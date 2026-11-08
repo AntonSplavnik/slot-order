@@ -198,9 +198,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** Anton looks at the deployed design pass 2 on the phone and merges PR #9; then `main` is pulled,
-CI's redeploy of both Workers checked, Status → merged. Anton sends the LinkedIn note (`MESSAGE.md`). Open, his
-call: stock photos instead of tiles (not the reference restaurant's photos). M7 only if he asks.
+**Next action:** design pass 3 on branch `m6-design` (PR #9): §11.7 written (the reference's type, shapes and
+colours measured from the screenshots; Figtree as the typeface); next the `itemQuantity` test (red) and stub, the
+brief `docs/handoffs/m6-web-design3.md`, the implementer agent, the checks, headless renders beside the reference,
+the commit on `m6-design`, Anton's hand deploy for the phone look, his merge.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -211,10 +212,11 @@ call: stock photos instead of tiles (not the reference restaurant's photos). M7 
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 on PR #9** (`b712312`, 2026-11-08), deployed by hand for Anton's look, CI green, waiting for his merge | #7, #9 | core 373, web 225, API 287, db 122; README has two "What the agent got wrong" entries |
+| M6 | merged 2026-11-07 (`648edc6`); design pass 2 on PR #9 (`b712312`, 2026-11-08) seen by Anton: structure right, look not; **design pass 3: contract written** 2026-11-08 (§11.7: exact tokens from the screenshots, Figtree), tests and brief next | #7, #9 | core 373, web 225, API 287, db 122; README has two "What the agent got wrong" entries, a third comes with pass 3 |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-08, M6 (Anton's third review): the look after pass 2 still did not match the reference ("too simple"; the structure right). §11.7 added with the design tokens measured pixel by pixel from the 23 screenshots (colours as sampled, the type scale from cap heights, shapes from scan lines: 56 px buttons with radius 8, square tiles with radius 12, 36 px pills, 5 px tab track, 24 px card corners, 4 px bands), Figtree chosen over three other open typefaces as the nearest to Uber Move (proprietary, so "exact" means the closest open font); §11.2 `itemQuantity` (the tile's round button shows the cart quantity, as the reference does); §11.3 the font through `next/font/google`; §11.4 its test; §11's look line. In the pass-3 contract commit.
 - 2026-11-08, M6 (Anton's second review): the look after the first polish still fell short; Anton set Uber Eats' standardized store layout as the reference and chose coloured tiles over photos. §11's "no design system" line replaced by the reference and its rules; §11.6 added. The reference screenshots stay outside git (`reference/`, ignored): layout only, no content of theirs. In the design-pass PR.
 - 2026-11-07, after the M6 merge: the first CI run on `main` deployed the migrations and the API and failed at the web step: `pnpm --filter @slot-order/web deploy` is pnpm's built-in `deploy` command, not the package script; `run deploy` (§14, the CI step, the docs). Caught by CI, not by a review; the live web Worker was the hand deploy of the same commit. PR `fix-ci-web-deploy`.
 - 2026-11-07, M6 (Anton's review of PR #7): the screens looked bare; a polish pass (`a269fcf`, screens and components only, behaviour untouched) and the README's first "What the agent got wrong and what I changed" entry. §11.5 records the look; §16 the four small behaviours left out on purpose. In the M6 PR.

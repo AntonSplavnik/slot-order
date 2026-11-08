@@ -724,9 +724,11 @@ with core's schemas, and prices the cart locally with core's `priceCart` while a
 | `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`; a 401 clears it and asks again). The day's slots from `GET /staff/orders?date=` as sections with `booked/capacity`; each order a card: code, name, lines with options, status, buttons **Ready** (paid) and **Picked up** (paid or ready). Refreshes every 10 s. A date input for other days. |
 | `/staff/pickup?code=` | **Check-in.** The QR code's target. With a token: calls `POST /staff/pickup` and shows the order and "Picked up ✓", or the error's text (`invalid_code`, `invalid_transition`). Without: asks for the token first. |
 
-The look, after Anton's reviews (§11.5, §11.6): the skeleton of a delivery app's store page (the reference he
-chose, 2026-11-08, is Uber Eats' standardized store layout) with coloured tiles instead of photos, Tailwind
-utilities only, the system font, black primary buttons, green for positive tags. No dark mode work. No images.
+The look, after Anton's reviews (§11.5, §11.6, §11.7): the skeleton of a delivery app's store page (the reference
+he chose, 2026-11-08, is Uber Eats' standardized store layout) with coloured tiles instead of photos, Tailwind
+utilities over the design tokens of §11.7 (exact colours, type scale and shapes measured from the reference
+screenshots; Figtree as the nearest open typeface to the reference's proprietary one), black primary buttons,
+green for positive tags. No dark mode work. No images.
 
 ### 11.2 Library (`apps/web/src/lib/`): pure functions, tested without a DOM
 - `config.ts`: `apiBaseUrl()` = `NEXT_PUBLIC_API_URL` without a trailing slash, default `http://localhost:8787`.
@@ -745,6 +747,8 @@ utilities only, the system font, black primary buttons, green for positive tags.
   below 1 removes the line, above 20 clamps, a bad index answers an equal cart; `removeLine(cart, index)` (a bad
   index likewise); `setPromoCode(cart, code)`:
   trimmed and upper-cased, empty → no `promoCode`; `itemCount(cart)` (the sum of quantities, 0 when empty);
+  `itemQuantity(cart, itemId)` (the sum of the quantities of the lines with that item, over every option set; 0
+  when none: the number the tile's round button shows, §11.7);
   `priceLocally(menu: PublicMenu, cart): Receipt` = core's `priceCart` on the menu with `promoCodes: []` and the
   cart without its promo code (a `CartError` propagates; the screen drops the offending line). Persistence with an
   injected `StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">`: `CART_KEY = "slot-order.cart"`,
@@ -800,6 +804,10 @@ utilities only, the system font, black primary buttons, green for positive tags.
   `compatibility_flags = ["nodejs_compat"]`, `[assets] directory = ".open-next/assets", binding = "ASSETS"`,
   `upload_source_maps = true`, `[observability] enabled = true`. `public/_headers`: `/_next/static/*` immutable for a
   year. `postcss.config.mjs` with `@tailwindcss/postcss`; `src/app/globals.css` with `@import "tailwindcss"`.
+- The typeface (§11.7) comes through `next/font/google` (`Figtree`, weights 400, 500, 700, `subsets: ["latin"]`,
+  `display: "swap"`) in `layout.tsx`: `next build` downloads the files once and self-hosts them under
+  `/_next/static` (CI and the OpenNext build have network; no npm package, no runtime request to Google). The
+  font's CSS variable feeds Tailwind's `--font-sans`; the fallback stack is `system-ui, sans-serif`.
 - `NEXT_PUBLIC_API_URL` is baked in at build time: `.env.example` → `.env.local` (git-ignored) for development; the
   CI deploy step sets it to the live API. No `.dev.vars`: the web Worker reads no bindings. Vitest with
   `environment: "node"`; `lib` touches no DOM (storage is injected).
@@ -810,8 +818,8 @@ utilities only, the system font, black primary buttons, green for positive tags.
 
 ### 11.4 Tests (`apps/web/test/`)
 Unit tests of §11.2, the plan's list made exact: the cart (add and merge, quantities and clamps, remove, the promo
-code, local pricing equal to core's `priceCart`, the persistence round trip, a corrupt or throwing store → empty),
-the sections, the option rules, the day strip, chips and labels, the status texts per status and reason, the API
+code, local pricing equal to core's `priceCart`, the persistence round trip, a corrupt or throwing store → empty,
+`itemQuantity` over several option sets of one item), the sections, the option rules, the day strip, chips and labels, the status texts per status and reason, the API
 client over a stub `fetch` (every method's path, query, headers and body; the schema parse of answers; each error
 mapping), the QR payload and SVG, the staff token, `apiBaseUrl`. No component tests: the screens are checked in the
 demo (§13 Manual).
@@ -880,6 +888,143 @@ item card opens the sheet for every item, groups or not (the round "+" still add
 the menu" shows for `picked_up` as well as `expired` and `cancelled`; the sheet's hero tile is 16:9, the grid's
 4:3; grid prices are plain (no "from"); Escape closes the sheet and the page behind it does not scroll while it is
 open; the sheet's stepper runs 1–20.
+
+### 11.7 Design pass 3: the reference's type, shapes and colours (Anton's review, 2026-11-08)
+Anton's third review: the structure of pass 2 is right, the look is not ("too simple and not matching the
+reference"); fonts, shapes and colours are to match the reference screenshots exactly. The numbers below were
+measured on the 23 screenshots (1284 × 2778 px at 3×; every value here is in CSS px = points) with pixel scans
+of the originals; the colours are the sampled values, not a design system's names. The structure of §11.6 stays;
+behaviour stays. The screenshots remain outside git (`reference/`, ignored).
+
+**Typeface.** The reference is set in Uber Move, Uber's proprietary typeface, which cannot be licensed for this
+app. Four open candidates were rendered beside the reference at the same pixel size (Figtree, Plus Jakarta Sans,
+DM Sans, Albert Sans); **Figtree** (SIL Open Font License) is the closest in width, x-height and letterforms
+(double-storey a, single-storey g, straight-tailed y, flagged 1) and is used everywhere, including the pickup
+codes (no monospace any more: codes in Figtree 700 with `tracking-[0.12em]` and `tabular-nums`). Loaded as §11.3
+says. Prices and codes always `tabular-nums`.
+
+**Colours** (sampled; Tailwind theme tokens in `globals.css` under `@theme`, used as `bg-ink`, `text-ink-3` …):
+
+| Token | Value | Where |
+|---|---|---|
+| `ink` | `#111111` | text, primary buttons and pills, icons, the active tab and its track segment, selected radios and checkboxes, status tag "Paid" |
+| `ink-2` | `#525252` | secondary text: hints under group names, row subtitles, order-summary labels, "Product info"-style links |
+| `ink-3` | `#6B6B6B` | tertiary text: item descriptions, prices in rows, option summaries, inactive tabs, placeholders, info lines in grey, the unselected radio ring |
+| `line` | `#E4E4E4` | 1 px hairlines between rows (cart, checkout, status, staff), the tab track |
+| `line-2` | `#F3F3F3` | 1 px hairlines between option rows in the sheet; the 4 px bands between sections |
+| `well` | `#F6F6F6` | steppers, inputs, the textarea, grey pills (Add items, Refresh, the date input), segmented-control tracks, disabled chips |
+| `tag` | `#ECECEC` | the Required / Optional tag and grey status tags |
+| `green` | `#108041` | the Popular tag and the "Ready" tag (white text) |
+| `green-text` | `#05632F` | positive text lines (an applied promo code, the discount row) |
+| `green-soft` / `green-soft-text` | `#EAF6ED` / `#166C3B` | the soft green chip on the store card |
+| `mute` | `#C4C4C4` | a disabled glyph (the stepper's "−" at quantity 1) |
+| `chevron` | `#AFAFAF` | row chevrons, disabled text on chips (Uber Base gray400; sampled `#AAAAAA` on a 1.5 px stroke) |
+| `disabled` / `disabled-text` | `#E2E2E2` / `#AFAFAF` | a disabled primary button (not in the screenshots: Uber Base's values) |
+| `negative` / `negative-soft` | `#E11900` / `#FFEFED` | error text and its box, the "Cancelled" tag (not in the screenshots: Uber Base's values) |
+
+White surfaces everywhere; the item tiles keep §11.6's six warm backgrounds (the reference's photos are the other
+restaurant's content).
+
+**Type scale** (size/line-height, weight; Figtree):
+
+| Style | Used for |
+|---|---|
+| 24/28 700, `tracking-[-0.01em]` | the store name, the cart title, the sheet title, the status headline, the check-in result |
+| 20/24 700 | section headings, option-group headings, "Order summary", "Pickup code", "Orders" |
+| 20/24 500 | the sheet price |
+| 18/24 500 | primary button labels, the floating cart pill, the store page's compact header title |
+| 18/24 700 | the cart's Subtotal/Total line, the order-summary Total, pickup codes on the staff board |
+| 16/20 500 | item names (grid and rows), row titles, page header titles ("Checkout", "Your order", "Staff"), the stepper's number, the quantity in a tile's round button |
+| 16/20 400 | option names, order-summary labels (`ink-2`), inputs and their placeholders, body text |
+| 14/20 400 | prices in the grid (`ink`), descriptions (`ink-3`), option summaries, group hints (`ink-2`), info lines, the VAT lines, staff order lines |
+| 14/20 500 | tab labels, chip and segment labels, the Required / Optional tag, Add items, status tags, "Product info"-style links |
+| 12/16 500 | the Popular tag, the small label under a value in the info boxes, the footer's Staff link |
+| 12/16 400 | the footer note, captions |
+| 32/36 700, `tracking-[0.12em]` | the pickup code on the status and check-in pages |
+
+**Shapes** (CSS px):
+- Page: white, side margin 16; the content column `max-w-md` as before.
+- Headers: 56 high, white, no border. A page header has the title 16/20 500 centred and a 44 × 44 hit area at
+  the left for the X (close, on the cart) or the back arrow (24 icon, stroke 2); the store page's compact header
+  (appears once the name has scrolled under it) has the title 18/24 500. Over the cover, round white icon buttons
+  40 wide with `shadow-[0_1px_6px_rgba(0,0,0,0.18)]` (ours: the cart button with its badge, top right, 12 from the
+  edges).
+- Cover (store page): 260 high (the reference's photo is about 300 of visible height; ours is §11.6's gradient
+  with the mark and the faint glyph pattern); the white card overlaps it by 24 with top corners of radius 24.
+  Card: padding 20 16 0; the name 24/28 700; the info line 14/20 400 `ink` with " • " separators ("Halal chicken •
+  Pickup only • Berlin"); the grey line 14/20 400 `ink-3`; a soft green chip (24 high, radius 4, `green-soft`,
+  14/20 500 `green-soft-text`, padding 0 8: "Pay online, pick up on time"); then one bordered box split in two (1 px
+  `line`, radius 12, 72 high, a 1 px divider; each cell centred: value 14/20 500 `ink` over a label 12/16 400
+  `ink-3`: "Pickup only" / "order ahead" and "Every 15 min" / "pickup slots").
+- Tab bar (sticky under the compact header): 44 high; labels 14/20 500 (`ink` active, `ink-3` inactive) with
+  16 horizontal padding each, scrolling horizontally from the 16 margin; under the labels a 5 px track `line`
+  across the full width whose segment under the active tab is `ink`; then 3 px white and a 4 px `line-2` band.
+- Sections: padding-top 24; heading 20/24 700 with margin-bottom 16; the item grid two columns, gutter 8,
+  row gap 20.
+- Item card: the tile **square** (1:1), radius 12, the glyph centred (text-6xl); the round "+" 36 white,
+  `shadow-[0_1px_6px_rgba(0,0,0,0.18)]`, 8 from the tile's right and bottom edges, the plus icon 20 stroke 2;
+  **when the cart holds the item (any option set) the circle shows `itemQuantity` in 16/20 500 instead of the
+  plus** (as the reference does); under the tile, margin-top 8: the name 16/20 500 (two lines at most), the price
+  14/20 400 `ink` on the next line, the description 14/20 400 `ink-3` (two lines), the Popular tag with
+  margin-top 8.
+- Tags: Popular 20 high, radius 4, `green`, 12/16 500 white, padding 0 6; Required / Optional 24 high, radius 6,
+  `tag`, 14/20 500 `ink`, padding 0 8; status tags on the staff board share the Required shape (`tag` with
+  `ink-2` text for Held, Picked up and Expired; `ink` with white text for Paid; `green` with white text for Ready;
+  `negative-soft` with `negative` text for Cancelled).
+- Primary button: 56 high, radius 8, `ink`, label 18/24 500 white, two parts joined by " • " ("Add 1 to cart •
+  9,40 €", "Pay • 22,30 €"; "Go to checkout" alone); disabled `disabled` / `disabled-text`. Pinned to the bottom
+  in a white bar with padding 12 16 and the safe-area inset, no top border. Secondary button: the same shape in
+  `well` with `ink` text. Small buttons (staff rows): 40 high, radius 8, 14/20 500.
+- Pills: the stepper 36 high, fully rounded, `well`; the cart's 92 wide (trash icon 20 at quantity 1, else "−";
+  the number 16/20 500; "+" 20), the sheet's 130 wide (the "−" in `mute` at quantity 1); "Add items" and
+  "Refresh" 36 high, `well`, padding 0 16, 14/20 500 with a 16 icon; the floating cart pill 56 high, `ink`, fully
+  rounded, padding 0 24, a 20 bag icon and "View cart • n" 18/24 500 white, `shadow-[0_6px_20px_rgba(0,0,0,0.25)]`,
+  centred 20 above the bottom (safe area).
+- Chips (the day strip): 36 high, fully rounded, `well`, 14/20 500 `ink`, padding 0 12; the chosen day `ink` with
+  white text; a non-open day `well` with `chevron` text and its status word. Slot options (the time grid): white
+  cards with a 1 px `line` border, radius 8, 48 high, the label 14/20 500 centred; the chosen one a 2 px `ink`
+  border (as the reference's time options); a disabled one `well` with `chevron` text and the hint 12/16 400
+  under the label.
+- Rows (cart lines, checkout rows, status details, check-in details): padding 16 0, 1 px `line` hairlines between
+  them; a cart line has a 72 square tile (radius 12), the name 16/20 500, the price 14/20 400 `ink-3`, the option
+  summary 14/20 400 `ink-3` ("Size: large • Sauce: garlic"), the stepper at the right; a checkout row has a 24
+  icon (stroke 2) at the left, the title 16/20 500, the subtitle 14/20 400 `ink-2`, a 20 chevron in `chevron` at
+  the right; 4 px `line-2` bands between row groups (full bleed, `-mx-4`).
+- Order summary: rows 32 high, label and value 16/20 400 `ink-2`; the VAT lines 14/20 400 `ink-3`; the discount
+  row `green-text`; Total 18/24 700 `ink` with margin-top 8 and no rule above.
+- Inputs: 48 high, radius 8, `well`, padding 0 16, 16/20 400 `ink`, placeholder `ink-3`; focused: a 2 px `ink`
+  ring inside (`ring-2 ring-ink ring-inset`), still `well`; the textarea-like note field is not used. The date
+  input on the staff board is a 36 `well` pill.
+- Radio: 18 circle, 1.5 px `ink-3` ring; chosen: `ink` ring with an 8 `ink` dot. Checkbox: 18 square, radius 4,
+  1.5 px `ink` border; chosen: `ink` fill with a white check (stroke 2). Both at the row's right, 16 from the edge.
+- Item sheet: a full-height panel sliding up (as now), white; the hero tile 230 high across the top with the
+  glyph (text-8xl) and a round white X (44, `shadow-[0_1px_6px_rgba(0,0,0,0.18)]`, 8 from the hero's top and
+  left); the body padding 16: the title 24/28 700 (margin-top 16), the price 20/24 500 (margin-top 8), the
+  description 14/20 400 `ink-3` (margin-top 12); a 4 px `line-2` band; each option group: padding 16 0, the
+  heading 20/24 700 with the Required / Optional tag at the right, the hint 14/20 400 `ink-2` (margin-top 2), the
+  rows (72 high: name 16/20 400, the delta "+1,50 €" 14/20 400 `ink-2` under it when non-zero, the radio or
+  checkbox at the right) with 1 px `line-2` hairlines; 4 px `line-2` bands between groups; then the stepper
+  section (padding 16, the 130 pill left-aligned); the pinned primary button "Add n to cart • total". The
+  backdrop `bg-black/40`.
+- Progress line (status page): three segments 4 high, fully rounded, gap 6; reached `ink`, the rest `line`;
+  labels 14/20 500 (`ink` reached, `chevron` not).
+- QR card: white, 1 px `line`, radius 12, padding 24; the QR 224 wide; the code 32/36 700 `tracking-[0.12em]`.
+- Staff board: slot cards white with a 1 px `line` border and radius 12; the slot heading row padding 12 16,
+  16/20 500 with "booked/capacity" 14/20 400 `ink-3`, a 1 px `line` rule under it (no grey fill); order rows
+  padding 12 16 with the code 18/24 700 `tracking-[0.12em]`, the name 16/20 500, the lines 14/20 400 `ink-2`,
+  the status tag at the right, the small buttons in a row; empty slots one 14/20 400 `chevron` line.
+- Toast: `ink`, radius 8, 14/20 500 white, padding 12 16. Error box: `negative-soft`, radius 8, 14/20 400
+  `negative`, padding 12 16. Focus ring: 2 px `ink`, offset 2 (unchanged).
+- Icons: inline SVGs, 24 viewBox, stroke 2, round caps (unchanged); new ones allowed: trash, search, tag, card,
+  check, list.
+- Footer: 12/16 400 `ink-3`; the Staff link 12/16 500 `ink`, underlined on hover.
+
+**Decisions.** The exact font is unavailable, so "exact" means the closest open typeface, chosen on a rendered
+comparison and recorded here. Four values are Uber Base's rather than sampled (disabled and negative colours,
+`chevron`): the screenshots show no disabled button, no error and the chevrons are antialiased. The cover's
+height follows the reference's proportion rather than its photo. The tile's round button showing the cart
+quantity is the one behaviour-level addition (pure: `itemQuantity`); everything else is style. The brief:
+`docs/handoffs/m6-web-design3.md`.
 
 ## 12. Errors
 
