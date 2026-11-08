@@ -88,6 +88,13 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
   polish pass with the look spelled out: a header with the name and a cart badge, item cards, a real bottom sheet
   for options, slot chips with states, a card-style status page with the code in large letters, tidier staff cards.
   Commit `a269fcf`: screens and components only; the library, its 218 tests and every behaviour unchanged.
+- **2026-11-08, M6, second review: the polish was tidy but still not the look of a real ordering app.** I set a
+  reference, Uber Eats' store layout (the same skeleton for every restaurant there), and chose coloured tiles over
+  photos, since the made-up menu has none. The agent had read the spec's "no design system beyond Tailwind
+  defaults" as a reason to stop at cards and buttons; the fix was a reference, not more words. Commit `b712312`:
+  the screens rebuilt on that skeleton (cover band, sticky section tabs, a two-column tile grid, tagged option
+  groups with a pinned Add button, the cart-style checkout, a progress line on the status page), one new tested
+  library file for the tiles, behaviour otherwise unchanged. The reference screenshots stay outside git.
 
 ## Docs
 

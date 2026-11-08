@@ -875,7 +875,11 @@ at one; rows with icons for pickup time, name and promo code; the order summary;
 mode" row; the pinned "Pay · total" button); the status page with a three-step progress line (Paid → Ready →
 Picked up) in the same language; the staff pages keep their structure in the same language. The reference
 screenshots live outside git (`reference/`, ignored): a real restaurant's store, used for layout only; none of its
-content is in the repo. The brief: `docs/handoffs/m6-web-design.md`.
+content is in the repo. The brief: `docs/handoffs/m6-web-design.md`. Decisions of the pass (`b712312`): tapping an
+item card opens the sheet for every item, groups or not (the round "+" still adds a plain item at once); "Back to
+the menu" shows for `picked_up` as well as `expired` and `cancelled`; the sheet's hero tile is 16:9, the grid's
+4:3; grid prices are plain (no "from"); Escape closes the sheet and the page behind it does not scroll while it is
+open; the sheet's stepper runs 1–20.
 
 ## 12. Errors
 
