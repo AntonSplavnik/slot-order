@@ -33,8 +33,8 @@ production check, CV.
 | M2 | Core: pricing + VAT + promo + order transitions + tests | Money and rounding errors | The §7.4 receipt printed by a test |
 | M3 | Supabase schema, functions, seed + `test:db` | Overbooking under concurrency | 50 parallel → 1 winner, in CI too |
 | M4 | Hono API on Workers (menu, slots, quotes, orders, staff) + deploy | The new stack end to end | curl against the deployed Worker |
-| M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 on PR #9** (`b712312`, 2026-11-08), deployed by hand for Anton's look, CI green, waiting for his merge | #7, #9 | core 373, web 225, API 287, db 122; README has two "What the agent got wrong" entries |
+| M5 | Stripe Checkout (test) + idempotent webhook + cron | Payments and the hold race | Test card → `paid`, pickup code; the same event twice → one order |
+| M6 | Next.js + Tailwind flow and staff board + QR check-in + deploy | UI and the OpenNext deploy | Phone: order → pay → QR; second phone: scan → picked up |
 | M7 | POS adapter interface + mock (not planned) | Integration thinking | Paid order appears in the mock POS log |
 
 ### M0: Repo setup
@@ -210,8 +210,8 @@ call: stock photos instead of tiles (not the reference restaurant's photos). M7 
 | M2 | **merged** 2026-11-06 | #3 | 373 tests green under both timezones; integer-only money; the agents caught the brief's wings-menu arithmetic and 7 silent points in §7, now written |
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
-| M5 | contract being written (branch `m5-stripe`, 2026-11-07): research done, §9/§10/§14/§17 being refined, stubs next | | `stripe` 23.1.0 added to `apps/api` |
-| M6 | not started | | |
+| M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
+| M6 | merged 2026-11-07 (`648edc6`); **design pass 2 on PR #9** (`b712312`, 2026-11-08), deployed by hand for Anton's look, CI green, waiting for his merge | #7, #9 | core 373, web 225, API 287, db 122; README has two "What the agent got wrong" entries |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
