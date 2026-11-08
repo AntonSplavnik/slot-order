@@ -106,6 +106,16 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
   colour (4.3:1), truncation with no way back, a modal that never managed focus, and safe-area insets that were
   silently 0. Commit `514a81a`: screens and tokens; one tested library function for the tile's quantity badge; the
   spec (§11.7) carries every number and the review.
+- **2026-11-08, M6, fourth review: the "+" on a tile put items without options straight into the cart.** Pass 3
+  had kept a shortcut from the first version: a tile's round "+" added an item without option groups at once and
+  opened the sheet only for items with groups. In the reference the "+" always opens the item's page, and the page
+  is where the item is added. I sent 17 more screenshots of item pages and asked for that, with one exception I
+  added while the work ran: drinks go straight into the cart, and a last screenshot showed what their button
+  becomes after an add (a "−" / count / "+" pill in the tile's corner). I also asked for more motion, planned
+  with the motion skills before the implementer ran. Commit `a1090ec`: a full-screen item page with an exit
+  animation, the drink pill, twelve motions, four tested library functions; the spec (§11.9) carries the
+  measurements, the motion plan and the two calls I can still flip (a drink's tile tap adds one; the page's
+  drink rows carry the pill).
 
 ## Docs
 

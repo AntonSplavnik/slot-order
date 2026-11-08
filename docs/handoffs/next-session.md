@@ -1,84 +1,69 @@
 # Next session
 
-**Written:** 2026-11-08, after PR #9 (design passes) and PR #10 (photo tiles) were merged and CI deployed `main`. Start the new session
-with the prompt at the end.
+**Written:** 2026-11-08, after PR #11 (design pass 4, the item page) was opened. Start the new session with the
+prompt at the end.
 
 ## State
-- **Merged and live:** M0–M6 (#1–#7), the CI fix #8 and PR #9 (design passes 2 and 3, `pnpm dev:phone`), merged
-  2026-11-08 as `47f539e` on Anton's "let's deploy it and move on" after a laptop review. CI deployed the migrations,
-  the API Worker (`https://slot-order-api.antonsplavnik.workers.dev`) and the web Worker
-  (`https://slot-order-web.antonsplavnik.workers.dev`) from `main` (run 42482165887, green); the live web root
-  serves pass 3 with the self-hosted Figtree (verified by curl). Pass 3 is `docs/design.md` §11.7: tokens measured
-  from the 23 reference screenshots, Figtree as the nearest open typeface, a named type scale, square tiles, the
-  tile's round button showing the cart quantity (`itemQuantity`), the design-skill review (Anton's skills:
-  `better-*`, `emil-design-eng`, `mobile-native`, …) applied before the implementation.
-- **PR #10 merged and live (2026-11-08, `951e281`):** photo tiles. Anton approved a stock-photo mock (built by a
-  subagent; `reference/photo-mock/`, git-ignored), then picked the cover from a comparison page of eight candidates
-  (`reference/photo-mock/cover-candidates/`): §11.8, eleven free photos (Pexels, Unsplash; `apps/web/public/items/`
-  with `CREDITS.md`), `photos.ts` with 9 tests, `Tile` with the glyph tile as fallback, the wings cover. CI
-  deployed both Workers (run 42487678056); the live site serves `/items/*` with a one-day cache. Branches
-  `m6-design` and `m6-photos` still exist on the remote (nothing deleted on purpose). No PR open.
-- **README:** three "What the agent got wrong and what I changed" entries (bare UI → `a269fcf`; the reference →
-  `b712312`; measured exactness and the skill review → `514a81a`).
-- **Private files (git-ignored):** `HANDOFF.md` (the brief), `MESSAGE.md` (the LinkedIn note, Anton edits and
-  sends it), `reference/uber-eats/` (23 phone screenshots of a real restaurant's store on Uber Eats: type,
-  shapes, colours and layout reference only; none of its content, name or photos may enter the repo). Nothing
-  committed names the company or the restaurant.
-- **Phone review, open:** `pnpm dev:phone` (§15) serves the web app on the Mac's LAN address and proxies nothing; on
-  Anton's Mac the phone loaded the page (port 3001) but never reached the API (port 8787), even after `workerd`
-  was allowed in the firewall; every check from the Mac passed. Not solved; §15 lists the candidates and the
-  declined proxy alternative. Anton's `!` prefix cannot run `sudo` (no terminal for the password); such commands
-  go in Terminal.app. Still to send: the LinkedIn note (`MESSAGE.md`).
-- **Open, Anton's call:** stock photos instead of tiles (free licences, small WebP, a `CREDITS.md`); never the
-  reference restaurant's photos. §16 notes the reference's always-enabled Add button (validate on submit) as a
-  behaviour change for later. M7 (POS mock) only if he asks.
-- **Secrets, all set:** GitHub `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD`,
-  `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; API Worker `SUPABASE_SERVICE_ROLE_KEY`, `STAFF_TOKEN`,
-  `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`; the web Worker needs none (`NEXT_PUBLIC_API_URL` baked in by CI).
-  Stripe test mode: webhook endpoint `we_1UZExURpMWMSEzehPxv9ztph`. On the Mac, git-ignored: `.env`,
-  `apps/api/.dev.vars`, `apps/web/.env.local` (`NEXT_PUBLIC_API_URL=http://localhost:8787`). Logged in:
-  `supabase`, `wrangler`, `gh`; the Stripe CLI installed. Secrets are never printed.
-- **Local stack:** `supabase start` running under the linked project name (the auxiliary services are stopped on
-  purpose); the local database holds one test order from the pass-3 renders (`supabase db reset` clears it).
-  Port 3000 is held by another project: `pnpm dev:phone` uses 3001 (and binds both servers to the LAN address). Screens were rendered headless over Chrome's DevTools protocol at 390 × 844
-  (the driver script lived in the session scratchpad and is gone; easy to redo).
+- **Merged and live:** M0–M6 (#1–#7), the CI fix #8, PR #9 (design passes 2 and 3, `pnpm dev:phone`), PR #10 (photo
+  tiles, the wings cover). CI deploys both Workers from `main` (API `https://slot-order-api.antonsplavnik.workers.dev`,
+  web `https://slot-order-web.antonsplavnik.workers.dev`).
+- **PR #11 open (2026-11-08), branch `m6-item-page`, waiting for Anton:** design pass 4, `docs/design.md` §11.9.
+  Anton's fourth review: the tile's "+" opens the item's page for food and combos (as the reference does), drinks go
+  straight into the cart and show a "−" / count / "+" pill once added (his two additions while the work ran, the
+  second from a screenshot in `reference/uber-eats-3/`), and more motion, planned with the `improve-animations` and
+  `animate` skills (twelve motions M1–M12, three deferred to §16). Commits: the contract `24df842` (§11.9, four
+  stubs, 37 red tests, the briefs `docs/handoffs/m6-item-page-prep.md` and `-impl.md`), the green `a1090ec`
+  (`ItemPage`, `QuickAddControl`, `Count`, `Tile` size `row`, the theme's curves and keyframes), then the docs
+  commit (README's fourth "What the agent got wrong" entry, plan, this file). Checks: core 373, web 275, API 287,
+  typecheck, Biome, `next build`, the OpenNext build, the greps (one `truncate`). Renders at 390 × 844 in the
+  session scratchpad (gone with it; the DevTools driver scripts too; easy to redo).
+- **Anton's review of #11:** on the phone over the LAN (`pnpm dev:phone` on the branch; the §15 issue may still
+  block the API from the phone, in which case the laptop's browser at 390 wide). Only a phone can confirm the safe
+  areas, the drawer curve, the header crossfade and fast taps on "+". Two calls he can flip without touching the
+  library: a drink's **tile** tap adds one (there is no detail page for drinks; "nothing" or "open the page" are the
+  alternatives); the item page's "Add a drink" rows carry the same pill as the grid.
+- **Open, his call:** descriptions and more option groups for the other dishes so every item page has choices
+  (a data change: `supabase/seed.sql`, the core fixture `packages/core/test/fixtures/menu.ts`, and a migration for
+  the live database, since the seed was applied once; optional groups only keep every pinned receipt valid); the
+  §16 items from the item page reference (the "Complete your order" page, a note field, "More to explore",
+  ingredients, share, the back button, drag-to-dismiss); the phone review over the LAN (§15); M7 (POS mock) only
+  if he asks.
+- **Private files (git-ignored):** `HANDOFF.md`, `MESSAGE.md`, `reference/` (uber-eats, uber-eats-2, uber-eats-3,
+  photo-mock). Nothing committed names the company or the reference restaurant.
+- **Secrets, all set** (see the previous hand-off's list in git history, `a4c6894`); never printed. Local stack:
+  `supabase start` running; port 3000 is held by another project, the web dev server uses 3001.
 
-## How a milestone is run (what worked for M1–M6)
-1. **Contract first** (orchestrator): refine the spec §-sections into exact signatures; write the schemas, types and
-   throwing stubs so tests compile; typecheck and `pnpm check` must pass.
-2. **Test brief** `docs/handoffs/m<N>-<x>-tests.md`: files owned, files forbidden, every expected value precomputed
-   (and the instruction to verify numbers against core rather than trust the brief), "Done means".
-3. **Test agent** (`Agent`, `subagent_type: general-purpose`, `model: "opus"`, `effort: "xhigh"`), prompt: read the brief
-   and follow it; report files, counts, how they fail, `// SPEC:` points.
-4. **Review** the report and the test titles; fold `// SPEC:` points into the spec and the plan's change log; append
-   them to the implementer brief; commit `M<N>: … tests (red)`.
-5. **Implementer agent** (same model; `effort: "high"` for screens) from `docs/handoffs/m<N>-<x>-impl.md`; may not
-   edit tests or configs; reports deviations rather than bending code. Follow-ups by `SendMessage` to the same agent.
-6. **Review the diff**, run `pnpm test`, `pnpm test:db`, `pnpm typecheck`, `pnpm check` yourself, record the
-   implementer's decisions in the spec, commit `M<N>: … (green)`, push the branch, `gh pr create` with the milestone
-   body, update the plan's Status table and this file, wait for CI, **stop for Anton**. After his merge:
-   `git checkout main && git pull`, Status → `merged`.
-7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
-9. UI and design passes are reviewed on a phone over the LAN (`pnpm dev:phone`) before the merge; nothing is
-   deployed by hand to check a look (Anton's rule, 2026-11-08).
-8. For design work, Anton's design skills are part of the contract step: load them, review the spec and the screens
-   against them, write what they change into the spec before the implementer runs.
+## How a milestone is run (what worked for M1–M6 and the design passes)
+1. **Contract first** (orchestrator, or a prep subagent on Opus `effort: "high"` from a prep brief, as pass 4 did):
+   the spec §-section with every number, schemas or stubs so the tests compile, the implementer brief.
+2. **Test brief and red tests** (`docs/handoffs/m<N>-<x>-tests.md` or inside the prep brief); the orchestrator
+   reviews the titles, folds the agent's findings into the spec and the plan's change log, commits `… (red)`.
+3. **Design work:** Anton's design skills (`better-*`, `emil-design-eng`, `mobile-native`; for motion
+   `improve-animations` and `animate`) are part of the contract step: load them, review the spec against them,
+   write what they change into the spec before the implementer runs.
+4. **Implementer agent** (Opus, `effort: "high"` for screens, `"xhigh"` for logic) from the impl brief; may not edit
+   tests or configs; reports deviations rather than bending code; follow-ups by `SendMessage` to the same agent.
+5. **Review the diff**, run `pnpm test`, `pnpm typecheck`, `pnpm check` (and the builds) yourself, write the
+   implementer's decisions into the spec, commit `… (green)`, push, `gh pr create`, update the plan's Status and
+   this file, **stop for Anton**. After his merge: `git checkout main && git pull`, Status → merged.
+6. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
+7. UI and design passes are reviewed on a phone over the LAN before the merge; nothing is deployed by hand.
+8. Anton's corrections become README entries ("What the agent got wrong and what I changed", with the commit).
 
 ## Next action
-Nothing is open unless Anton asks. If he does: the stock-photo follow-up (free licences, small WebP, a `CREDITS.md`;
-never the reference restaurant's photos), the phone-review issue (§15), the employer's feedback (code changes are
-README entries), or M7 (POS mock; spec §16 first, tests first). A design pass 4 would go: §11.7 paragraph first, the
-design skills, the implementer, the laptop or phone review, then the merge.
+Wait for Anton's review of PR #11. If he asks for changes: a follow-up commit on `m6-item-page` (spec first if a
+rule changes), push, the PR updates. After his merge: `git checkout main && git pull`, the plan's Status → merged,
+check the live site. Then only what he asks for (the data change for descriptions and option groups is the likely
+next pass: spec §5 and §11.9 first, the fixture and seed, a migration, tests first).
 
 ## Rules in force
-Subagents on Opus 5.5, xhigh for logic (slots, pricing, SQL, payments, webhook), high for routine. Plan Status at every
-step. Nothing committed names the company or the reference restaurant (`HANDOFF.md`, `MESSAGE.md`, `reference/`
-private, git-ignored). No code before the spec section exists. Only reviewed work is merged; branches and PRs per
-milestone. Secrets never printed.
+Subagents on Opus 5.5, xhigh for logic, high for screens and docs. Plan Status at every step. Spec first, tests
+first. Nothing committed names the company or the reference restaurant. Only reviewed work is merged; branches and
+PRs per pass. Secrets never printed. Anton cannot open claude.ai artifacts: deliver local HTML files instead.
 
 ## Prompt for the new session
 ```
-Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. Nothing is open; PRs #9 and
-#10 are merged and deployed. Continue only with what I ask for, spec first and tests first, and update the plan's Status table at every
-step.
+Read CLAUDE.md, then docs/plan.md (the Status section), then docs/handoffs/next-session.md in full. PR #11 (design
+pass 4, the item page) is open on m6-item-page and waits for my review. Continue only with what I ask for, spec
+first and tests first, and update the plan's Status table at every step.
 ```
