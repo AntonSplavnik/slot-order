@@ -95,6 +95,16 @@ Real cases, as they happened. Each entry: what the agent did, why it was wrong, 
   the screens rebuilt on that skeleton (cover band, sticky section tabs, a two-column tile grid, tagged option
   groups with a pinned Add button, the cart-style checkout, a progress line on the status page), one new tested
   library file for the tiles, behaviour otherwise unchanged. The reference screenshots stay outside git.
+- **2026-11-08, M6, third review: the layout matched the reference, the look still did not.** Pass 2 had copied
+  the skeleton but kept approximations: the system font, Tailwind's default greys, 4:3 tiles, 52 px buttons. I
+  asked for a pass that matches the reference's fonts, shapes and colours exactly, and the agent measured the
+  screenshots pixel by pixel instead of eyeballing them: colours sampled, type sizes from cap heights, radii and
+  heights from scan lines; the reference's typeface is proprietary, so it rendered four open candidates beside it
+  and chose Figtree. Before letting it build, I installed design skills (accessibility, layout, writing,
+  typography, colour, motion, mobile) and had the plan checked against them first; that caught a failing error
+  colour (4.3:1), truncation with no way back, a modal that never managed focus, and safe-area insets that were
+  silently 0. Commit `514a81a`: screens and tokens; one tested library function for the tile's quantity badge; the
+  spec (§11.7) carries every number and the review.
 
 ## Docs
 
