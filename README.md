@@ -45,6 +45,7 @@ cp apps/api/.dev.vars.example apps/api/.dev.vars   # local service-role key from
                                # Stripe test keys (sk_test_…, and the whsec_ printed by `stripe listen`)
 cp apps/web/.env.example apps/web/.env.local       # NEXT_PUBLIC_API_URL, the local API
 pnpm dev                       # the API on http://localhost:8787 and the web app on http://localhost:3000
+pnpm dev:phone                 # both bound to the Mac's LAN address, to review on a phone over Wi-Fi without a deploy
 stripe listen --forward-to localhost:8787/webhooks/stripe   # another terminal: Stripe's events reach the local API
 curl localhost:8787/health     # {"ok":true}
 curl localhost:8787/menu       # the Goldhahn menu from the local database

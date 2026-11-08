@@ -188,6 +188,10 @@ board. Spec in §16 before any code.
   asks to change is an entry for the README's "What the agent got wrong" (with the commit). He merges; `main` deploys.
   (The brief says "only reviewed work is pushed"; a reviewed PR branch is the way this plan reads it, so CI and the
   review happen in the open. Anton can change this to "push after review" in CLAUDE.md.)
+- **Phone review before any deploy (Anton's rule, 2026-11-08).** A design or UI pass is reviewed on a real phone over
+  the LAN (`pnpm dev:phone`, §15) while the PR is open; production is deployed only by CI from `main` after the
+  merge. Passes 1 and 2 were deployed by hand from the branch to be seen on the phone, which put unreviewed code on
+  the production Worker twice; that stops here.
 - **Migrations** are tested with `supabase db reset` locally before they reach a PR; `supabase db push` runs only from CI
   on `main` (and once by hand in M3).
 
@@ -198,10 +202,10 @@ Updated at **every step change** and after each of Anton's approvals, so a fresh
 briefs) → `tests written (red)` → `implementation green` → `demo ok, PR open` → `approved` → `merged`.
 `docs/handoffs/next-session.md` names the exact next action whenever a session may end mid-milestone.
 
-**Next action:** design pass 3 is **implementation green** on `m6-design` (PR #9) and pushed: Anton deploys the web
-Worker by hand (`! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run
-deploy`), looks at it on the phone, and merges PR #9; then `main` is pulled, CI's redeploy of both Workers checked,
-Status → merged. The README's third "What the agent got wrong" entry and the hand-off are in the docs commit.
+**Next action:** design pass 3 is **implementation green** on `m6-design` (PR #9) and pushed, CI running. Anton
+reviews it on the phone over the LAN (`pnpm dev:phone`, then the printed URL; no deploy), and merges PR #9 if it is
+right; then `main` is pulled, CI's deploy of both Workers checked, Status → merged. If he asks for changes: a pass-4
+paragraph in §11.7 first, then the implementer.
 
 | Milestone | Step | PR | Notes |
 |---|---|---|---|
@@ -212,10 +216,11 @@ Status → merged. The README's third "What the agent got wrong" entry and the h
 | M3 | **merged** 2026-11-07 | #4 | 78 db tests green twice back to back; CI database job added; cloud project `ckvngajrwdijdtjvfblm` created and linked 2026-11-07, migrations and seed pushed, RLS verified against the cloud; GitHub secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` set; `SUPABASE_ACCESS_TOKEN` still needed from Anton |
 | M4 | **merged** 2026-11-07, live at `slot-order-api.antonsplavnik.workers.dev`, CI deploy on `main` proven; the production cron expired the demo hold on time (verified 2026-11-07) | #5 | 171 route tests + 38-test repository contract on both implementations; Worker deployed by hand once, CI deploy job for `main`; all Cloudflare and Supabase secrets set |
 | M5 | **merged** 2026-11-07 (`73666a1`); live demo passed: test card → `paid` with a pickup code, the replayed event → `{ duplicate: true }`, a forged signature → 400, the production cron expired an unpaid hold and its Stripe session | #6 | 287 API tests (116 new) + 122 db; migration and Worker deployed by hand from the branch by Anton before the merge (the agent sandbox refuses production deploys); Worker secrets and the test-mode webhook endpoint set |
-| M6 | merged 2026-11-07 (`648edc6`); design pass 2 on PR #9 (`b712312`) seen by Anton: structure right, look not; **design pass 3 implementation green** 2026-11-08 (§11.7's measured tokens, Figtree, the design-skill review applied; CI on the PR next, then Anton's hand deploy and phone look, then his merge) | #7, #9 | core 373, web 229, API 287, db 122, typecheck, Biome, both builds; README gets its third "What the agent got wrong" entry |
+| M6 | merged 2026-11-07 (`648edc6`); design pass 2 on PR #9 (`b712312`) seen by Anton: structure right, look not; **design pass 3 implementation green** 2026-11-08 (§11.7's measured tokens, Figtree, the design-skill review applied; CI on the PR next, then Anton's phone review over the LAN with `pnpm dev:phone`, then his merge) | #7, #9 | core 373, web 229, API 287, db 122, typecheck, Biome, both builds; README gets its third "What the agent got wrong" entry |
 
 ## Spec changes to record as they come up
 (Each entry: date, what changed, which § was updated, the commit.)
+- 2026-11-08, after pass 3 (Anton): "why deploy to check a design; check locally first". §15 gained the phone review over the LAN (`pnpm dev:phone`, `scripts/dev-phone.mjs`: the API and the web app bound to the Mac's address, `WEB_ORIGIN` and `NEXT_PUBLIC_API_URL` following it) and the rule that production is deployed only by CI from `main`; CLAUDE.md rule 4, the README's commands, this plan's workflow. In the dev:phone commit.
 - 2026-11-08, M6 (design pass 3, before the implementation): Anton installed design skills and asked for the design to be checked with them first. §11.7 gained the review paragraph: `negative` `#E11900` → `#AB1300` (4.34:1 on the soft red failed 1.4.3; now 6.66), the type scale as named `@theme` utilities with unitless line-heights, no truncation on the staff name and the cart's option summary (a trigger: no way back to the text), focus management and `inert` for the item sheet, the mobile baseline (`viewportFit: "cover"`: without it every safe-area inset was 0), press feedback and the sheet's drawer curve under `motion-safe:`, action-and-object accessible names, labelled inputs. §16: the reference's always-enabled Add button (validate on submit) noted as a later behaviour change. In the pass-3 review commit.
 - 2026-11-08, M6 (Anton's third review): the look after pass 2 still did not match the reference ("too simple"; the structure right). §11.7 added with the design tokens measured pixel by pixel from the 23 screenshots (colours as sampled, the type scale from cap heights, shapes from scan lines: 56 px buttons with radius 8, square tiles with radius 12, 36 px pills, 5 px tab track, 24 px card corners, 4 px bands), Figtree chosen over three other open typefaces as the nearest to Uber Move (proprietary, so "exact" means the closest open font); §11.2 `itemQuantity` (the tile's round button shows the cart quantity, as the reference does); §11.3 the font through `next/font/google`; §11.4 its test; §11's look line. In the pass-3 contract commit.
 - 2026-11-08, M6 (Anton's second review): the look after the first polish still fell short; Anton set Uber Eats' standardized store layout as the reference and chose coloured tiles over photos. §11's "no design system" line replaced by the reference and its rules; §11.6 added. The reference screenshots stay outside git (`reference/`, ignored): layout only, no content of theirs. In the design-pass PR.

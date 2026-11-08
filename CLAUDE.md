@@ -23,7 +23,8 @@ write.
    SQL functions, the webhook) and `effort: "high"` for the rest (scaffolding, screens, docs). Anton's rule, 2026-11-06.
 4. **Review gate.** A milestone ends when `pnpm test`, `pnpm typecheck`, `pnpm check` (and from M3 `pnpm test:db`)
    pass and the demo works. Commit on `m<N>-<name>`, push, open a PR, **stop** for Anton's review. He merges; `main`
-   deploys. One milestone at a time.
+   deploys. One milestone at a time. UI and design changes are reviewed on a phone over the LAN (`pnpm dev:phone`)
+   before the merge; nothing is deployed by hand to check a look. Anton's rule, 2026-11-08.
 5. **"What the agent got wrong and what I changed"** in `README.md`: whenever Anton corrects something the agent did,
    add an entry with the commit. Real examples only.
 6. **Context below ~28 %.** Write `docs/handoffs/next-session.md` and start a fresh session rather than let one grow.
@@ -61,6 +62,7 @@ pnpm install
 supabase start                 # local Postgres + PostgREST (Docker)
 supabase db reset              # migrations + seed, from scratch; always before a migration reaches a PR
 pnpm dev                       # wrangler dev (API, :8787; reads apps/api/.dev.vars) and next dev (web, :3000, M6)
+pnpm dev:phone                 # both bound to the Mac's LAN address: review a branch on a phone over Wi-Fi, no deploy
 stripe listen --forward-to localhost:8787/webhooks/stripe
 pnpm test                      # core + api unit/route tests; no network
 pnpm test:db                   # against local Supabase: migrations, functions, 50-parallel reservation, RLS

@@ -26,10 +26,11 @@ with the prompt at the end.
   sends it), `reference/uber-eats/` (23 phone screenshots of a real restaurant's store on Uber Eats: type,
   shapes, colours and layout reference only; none of its content, name or photos may enter the repo). Nothing
   committed names the company or the restaurant.
-- **Not done, Anton's:** deploy pass 3 by hand to look at it on the phone (the agent's sandbox refuses production
-  deploys): `! cd apps/web && NEXT_PUBLIC_API_URL=https://slot-order-api.antonsplavnik.workers.dev pnpm run deploy`
-  (one line, `!` first); then merge PR #9; send the LinkedIn note. A phone has to confirm what emulation cannot:
-  the safe-area insets, no tap flash, no zoom on inputs, the sheet's drawer curve.
+- **Not done, Anton's:** review pass 3 on the phone over the LAN: `pnpm dev:phone` (§15; it prints the URL for a
+  phone on the same Wi-Fi; `stripe listen --forward-to localhost:8787/webhooks/stripe` for a paid order), then merge
+  PR #9; CI deploys both Workers from `main`. No hand deploy to look at a design any more (Anton's rule,
+  2026-11-08; the agent's sandbox refuses production deploys anyway). Send the LinkedIn note. A phone has to confirm
+  what emulation cannot: the safe-area insets, no tap flash, no zoom on inputs, the sheet's drawer curve.
 - **Open, Anton's call:** stock photos instead of tiles (free licences, small WebP, a `CREDITS.md`); never the
   reference restaurant's photos. §16 notes the reference's always-enabled Add button (validate on submit) as a
   behaviour change for later. M7 (POS mock) only if he asks.
@@ -41,8 +42,7 @@ with the prompt at the end.
   `supabase`, `wrangler`, `gh`; the Stripe CLI installed. Secrets are never printed.
 - **Local stack:** `supabase start` running under the linked project name (the auxiliary services are stopped on
   purpose); the local database holds one test order from the pass-3 renders (`supabase db reset` clears it).
-  Port 3000 is held by another project: `next dev -p 3001` plus `wrangler dev --var
-  WEB_ORIGIN:http://localhost:3001`. Screens were rendered headless over Chrome's DevTools protocol at 390 × 844
+  Port 3000 is held by another project: `pnpm dev:phone` uses 3001 (and binds both servers to the LAN address). Screens were rendered headless over Chrome's DevTools protocol at 390 × 844
   (the driver script lived in the session scratchpad and is gone; easy to redo).
 
 ## How a milestone is run (what worked for M1–M6)
@@ -61,6 +61,8 @@ with the prompt at the end.
    body, update the plan's Status table and this file, wait for CI, **stop for Anton**. After his merge:
    `git checkout main && git pull`, Status → `merged`.
 7. Plan Status is updated at **every** step change (Anton's rule), with the "Next action" line.
+9. UI and design passes are reviewed on a phone over the LAN (`pnpm dev:phone`) before the merge; nothing is
+   deployed by hand to check a look (Anton's rule, 2026-11-08).
 8. For design work, Anton's design skills are part of the contract step: load them, review the spec and the screens
    against them, write what they change into the spec before the implementer runs.
 

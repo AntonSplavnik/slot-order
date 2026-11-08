@@ -1173,9 +1173,22 @@ cp apps/api/.dev.vars.example apps/api/.dev.vars    # local secrets: Supabase lo
 cp apps/web/.env.example apps/web/.env.local        # NEXT_PUBLIC_API_URL
 supabase db reset                   # migrations + seed
 pnpm dev                            # wrangler dev on :8787 and next dev on :3000
+pnpm dev:phone                      # both bound to the Mac's LAN address, for a phone on the same Wi-Fi (below)
 stripe listen --forward-to localhost:8787/webhooks/stripe   # in another terminal; put its secret in .dev.vars
 pnpm test · pnpm test:db · pnpm typecheck · pnpm check · pnpm format
 ```
+
+**Reviewing on a phone (2026-11-08).** A design pass is looked at on a real phone *before* anything is deployed.
+`pnpm dev:phone` (`scripts/dev-phone.mjs`, Node only, no dependency) finds the machine's LAN address (the first
+non-internal IPv4, `en0`/`en1` first; `LAN_IP` overrides), starts `wrangler dev --ip 0.0.0.0` with `WEB_ORIGIN`
+set to the phone-facing web origin (the API's CORS list and Stripe's return URLs follow it; the other variables
+come from `.dev.vars`), and `next dev -H 0.0.0.0 -p 3001` with `NEXT_PUBLIC_API_URL` pointing at the LAN API (the
+process environment wins over `.env.local`; port 3001 because 3000 is often taken) and `DEV_PHONE_HOST`, which
+`next.config.ts` turns into `allowedDevOrigins` (Next 16 blocks its dev resources, HMR and chunks, for an origin
+it does not know). The phone opens the printed URL. Stripe's test checkout returns to the LAN origin; the webhook still needs `stripe listen` as above. `WEB_PORT`
+and `API_PORT` override the ports. The dev server is not the OpenNext Worker; `pnpm --filter @slot-order/web
+preview` runs the real Worker build locally when that matters. Production is deployed only by CI from `main`; a
+hand deploy of a branch to the production Workers is for the rare case where production itself must be checked.
 
 `HANDOFF.md` (the private brief) and `MESSAGE.md` (the note that goes with the repo link) sit in the repo root and are
 git-ignored; nothing in the committed repo names the company this was written for.

@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel dev",
+    "dev:phone": "node scripts/dev-phone.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "check": "biome check .",
