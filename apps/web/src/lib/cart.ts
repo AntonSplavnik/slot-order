@@ -83,6 +83,11 @@ export function itemCount(cart: Cart): number {
   return cart.lines.reduce((total, line) => total + line.quantity, 0);
 }
 
+/** The sum of the quantities of the lines with `itemId`, over every option set; 0 when none (§11.7). */
+export function itemQuantity(_cart: Cart, _itemId: string): number {
+  throw new Error("not implemented");
+}
+
 /** Core's `priceCart` on the public menu (no promo codes) and the cart without its code; a CartError propagates. */
 export function priceLocally(menu: PublicMenu, cart: Cart): Receipt {
   return priceCart({ ...menu, promoCodes: [] }, { lines: cart.lines });

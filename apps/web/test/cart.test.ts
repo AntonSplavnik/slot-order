@@ -6,6 +6,7 @@ import {
   clearCart,
   emptyCart,
   itemCount,
+  itemQuantity,
   loadCart,
   priceLocally,
   removeLine,
@@ -304,5 +305,30 @@ describe("persistence through an injected storage (§11.2)", () => {
     clearCart(storage);
     expect(storage.getItem(CART_KEY)).toBeNull();
     expect(loadCart(storage)).toEqual(emptyCart());
+  });
+});
+
+describe("itemQuantity: the sum over every option set of one item (§11.2, §11.7)", () => {
+  test("0 for the empty cart and for an item that is not in the cart", () => {
+    expect(itemQuantity(emptyCart(), "cola")).toBe(0);
+    expect(itemQuantity(BURGER, "cola")).toBe(0);
+  });
+
+  test("one line: its quantity (cola ×3 → 3)", () => {
+    expect(itemQuantity(cart([line("cola", { quantity: 3 })]), "cola")).toBe(3);
+  });
+
+  test("the same item with different option sets adds up: large garlic ×2 + regular ×3 → 5", () => {
+    const burgers = cart([
+      line("chicken-burger", { options: LARGE_GARLIC, quantity: 2 }),
+      line("chicken-burger", { options: ["burger-regular"], quantity: 3 }),
+    ]);
+    expect(itemQuantity(burgers, "chicken-burger")).toBe(5);
+  });
+
+  test("other items are not counted: the two-line cart has 2 burgers, 3 colas and no fries", () => {
+    expect(itemQuantity(TWO_LINES, "chicken-burger")).toBe(2);
+    expect(itemQuantity(TWO_LINES, "cola")).toBe(3);
+    expect(itemQuantity(TWO_LINES, "fries")).toBe(0);
   });
 });
