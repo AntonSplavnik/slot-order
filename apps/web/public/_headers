@@ -1,3 +1,7 @@
 # docs/design.md §11.3: Next's hashed static files never change, so browsers keep them for a year.
 /_next/static/*
   Cache-Control: public,max-age=31536000,immutable
+
+# docs/design.md §11.3, §11.8: the item photos have unhashed names, so browsers keep them for a day.
+/items/*
+  Cache-Control: public,max-age=86400
