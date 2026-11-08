@@ -1185,7 +1185,10 @@ set to the phone-facing web origin (the API's CORS list and Stripe's return URLs
 come from `.dev.vars`), and `next dev -H 0.0.0.0 -p 3001` with `NEXT_PUBLIC_API_URL` pointing at the LAN API (the
 process environment wins over `.env.local`; port 3001 because 3000 is often taken) and `DEV_PHONE_HOST`, which
 `next.config.ts` turns into `allowedDevOrigins` (Next 16 blocks its dev resources, HMR and chunks, for an origin
-it does not know). The phone opens the printed URL. Stripe's test checkout returns to the LAN origin; the webhook still needs `stripe listen` as above. `WEB_PORT`
+it does not know). The phone opens the printed URL. On a Mac with the application firewall on, the page reaches the phone (Node is
+allowed) but the API does not until `workerd`, its runtime, is allowed too: the script detects that and prints the
+`socketfilterfw --add … --unblockapp …` command (sudo; once per workerd version, since the path carries it).
+Stripe's test checkout returns to the LAN origin; the webhook still needs `stripe listen` as above. `WEB_PORT`
 and `API_PORT` override the ports. The dev server is not the OpenNext Worker; `pnpm --filter @slot-order/web
 preview` runs the real Worker build locally when that matters. Production is deployed only by CI from `main`; a
 hand deploy of a branch to the production Workers is for the rare case where production itself must be checked.
