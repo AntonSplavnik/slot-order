@@ -1,7 +1,13 @@
-import { priceCart } from "@slot-order/core";
+import { type OptionGroup, priceCart } from "@slot-order/core";
 import { describe, expect, test } from "vitest";
 import { withBurgerSmall } from "../../../packages/core/test/fixtures/menu";
-import { optionNames, selectionValid, toggleOption, unitPrice } from "../src/lib/options";
+import {
+  groupHint,
+  optionNames,
+  selectionValid,
+  toggleOption,
+  unitPrice,
+} from "../src/lib/options";
 import { group, item, line, seedMenu, toPublic } from "./helpers";
 
 // docs/design.md §11.1 (the option sheet: radio for `maxChoices: 1`, checkboxes otherwise, Add only when
@@ -164,5 +170,47 @@ describe("unitPrice: the item's price plus the chosen deltas, in cents (§11.2, 
     const small = toPublic(withBurgerSmall(-100)).items.find((i) => i.id === "chicken-burger");
     if (small === undefined) throw new Error("no chicken-burger");
     expect(unitPrice(small, ["burger-small"])).toBe(690);
+  });
+});
+
+// docs/design.md §11.2 `options.ts` and §11.9: the grey line under a group's name on the item page, moved out
+// of the component into the library.
+
+/** A schema-valid group with `count` options (at least `maxChoices`). */
+function built(minChoices: number, maxChoices: number, count = maxChoices): OptionGroup {
+  return {
+    id: `g-${minChoices}-${maxChoices}`,
+    name: "Built",
+    minChoices,
+    maxChoices,
+    options: Array.from({ length: count }, (_, i) => ({
+      id: `g-${minChoices}-${maxChoices}-${i}`,
+      name: `option ${i}`,
+      priceDeltaCents: 0,
+    })),
+  };
+}
+
+describe("groupHint (§11.2, §11.9)", () => {
+  test('the seed\'s burger Size (1/1) → "Choose 1"', () => {
+    expect(groupHint(size)).toBe("Choose 1");
+  });
+
+  test('the seed\'s Sauce (0/2) → "Choose up to 2"', () => {
+    expect(groupHint(sauce)).toBe("Choose up to 2");
+  });
+
+  test('the seed\'s wings Heat (1/1) → "Choose 1"', () => {
+    expect(groupHint(group("chicken-wings", "chicken-wings-heat"))).toBe("Choose 1");
+  });
+
+  test.each<[number, number, number, string]>([
+    [1, 3, 3, "Pick at least 1, up to 3"],
+    [2, 3, 4, "Pick at least 2, up to 3"],
+    [2, 2, 2, "Choose 2"],
+    [0, 1, 1, "Choose up to 1"],
+    [0, 3, 5, "Choose up to 3"],
+  ])("a built group %i/%i (%i options) → %s", (min, max, count, hint) => {
+    expect(groupHint(built(min, max, count))).toBe(hint);
   });
 });

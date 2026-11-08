@@ -718,7 +718,7 @@ with core's schemas, and prices the cart locally with core's `priceCart` while a
 ### 11.1 Screens
 | Route | Screen |
 |---|---|
-| `/` | **Menu.** Three sections derived from the data (the menu has no section column): **Food** (`kind: item`, `vatCategory: food`), **Drinks** (`kind: item`, `vatCategory: drink`), **Menus** (`kind: combo`), items in `sort` order, inactive items hidden. Tapping an item with option groups opens a sheet with its groups (radio for `maxChoices: 1`, checkboxes otherwise; **Add** enabled only when every group has between its min and max choices); an item without groups is added at once. Lines with the same item and the same options merge. A cart bar with the item count and the total (local pricing). The cart lives in `localStorage` (§11.2 `cart.ts`). |
+| `/` | **Menu.** Three sections derived from the data (the menu has no section column): **Food** (`kind: item`, `vatCategory: food`), **Drinks** (`kind: item`, `vatCategory: drink`), **Menus** (`kind: combo`), items in `sort` order, inactive items hidden. A drink without a required option group (§11.2 `quickAdds`) goes into the cart at once from its round "+" or its tile; once in the cart its round button becomes a "−" / count / "+" pill (§11.9). Every other item (food, combos) opens its **item page** from the round "+" or the tile, and only the page adds it: full screen on phones, its option groups (radio for `maxChoices: 1`, checkboxes otherwise; **Add** enabled only when every group has between its min and max choices), a quantity stepper, "Add a drink" rows and the pinned "Add n to cart" button (§11.9). Lines with the same item and the same options merge. A cart bar with the item count and the total (local pricing). The cart lives in `localStorage` (§11.2 `cart.ts`). |
 | `/checkout` | **Slot and pay.** The cart's lines (quantity steppers, remove), the name (1–60 characters), a day strip (today and the next 6 days in Berlin; each day's status from `GET /slots?date=`, with `closed`, `past` and `too_far` days greyed and labelled), the chosen day's slots as chips (bookable ones tappable, the others disabled with their reason as a hint), the promo code field applied through `POST /quotes` (the receipt comes from the API while a code is set, from local pricing otherwise), the receipt with its VAT lines, **Pay** → `POST /orders` → the browser goes to `checkoutUrl`. An API error is shown inline by its code's text (§11.2 `errors.ts`); after a slot error (409) the slots are reloaded. An empty cart sends the customer back to `/`. |
 | `/orders/[id]` | **Status.** Polls `GET /orders/:id` every 3 s while `held` ("Confirming your payment…" when the URL carries `?paid=1`, else "Waiting for your payment" with a link to `checkoutUrl`). `paid`: the QR code (an inline SVG of the staff pickup URL), the pickup code in letters, the slot time, the receipt. `ready`: "Ready, come and get it". `picked_up`: "Enjoy your meal". `expired`: "Your slot hold ran out; start again". `cancelled`: the reason in words (§11.2 `status.ts`). |
 | `/staff` | **Board.** Asks for the staff token once (kept in `localStorage`; a 401 clears it and asks again). The day's slots from `GET /staff/orders?date=` as sections with `booked/capacity`; each order a card: code, name, lines with options, status, buttons **Ready** (paid) and **Picked up** (paid or ready). Refreshes every 10 s. A date input for other days. |
@@ -749,6 +749,10 @@ green for positive tags. No dark mode work. No images.
   trimmed and upper-cased, empty → no `promoCode`; `itemCount(cart)` (the sum of quantities, 0 when empty);
   `itemQuantity(cart, itemId)` (the sum of the quantities of the lines with that item, over every option set; 0
   when none: the number the tile's round button shows, §11.7);
+  `removeOne(cart, itemId)` (the "−" of a quick-added drink's pill, §11.9: the line with that `itemId` and no
+  options, the only line a quick-added item can have, loses one of its quantity; at quantity 1 the line is
+  removed; no such line → an equal cart; a line with options is never touched; the promo code and the other
+  lines stay);
   `priceLocally(menu: PublicMenu, cart): Receipt` = core's `priceCart` on the menu with `promoCodes: []` and the
   cart without its promo code (a `CartError` propagates; the screen drops the offending line). Persistence with an
   injected `StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">`: `CART_KEY = "slot-order.cart"`,
@@ -762,7 +766,14 @@ green for positive tags. No dark mode work. No images.
   `coverPhoto(): Photo` (`/items/cover.jpg`). Pure data, no I/O.
 - `menu.ts`: `menuSections(menu: PublicMenu): { id: "food" | "drinks" | "menus"; title: string; items: MenuItem[] }[]`
   as §11.1 (titles "Food", "Drinks", "Menus"; sections without items omitted; inactive items hidden);
-  `itemById(menu, id): MenuItem | undefined` (a lookup: it finds inactive items too).
+  `itemById(menu, id): MenuItem | undefined` (a lookup: it finds inactive items too);
+  `quickAdds(item: MenuItem): boolean` (§11.9: true for a drink, `kind: item` with `vatCategory: drink`, that has no
+  option group with `minChoices > 0`; false for everything else; such an item goes into the cart at once from the
+  grid and from the item page's rows, any other item opens the item page; a drink that gains a required group
+  stops quick-adding and opens the page like food);
+  `upsellItems(menu: PublicMenu, item: MenuItem): MenuItem[]` (§11.9, the item page's "Add a drink" rows: for an
+  item that is not a drink, the Drinks section's items from `menuSections`, so active and in `sort` order, for which
+  `quickAdds` is true; for a drink `[]`; never the item itself; the menu's own item objects).
 - `options.ts`: `toggleOption(group: OptionGroup, selected: string[], optionId): string[]` over the whole selection
   of the item (ids of other groups untouched): in a `maxChoices: 1` group the tapped option replaces the group's
   choice (the old id leaves, the new one is appended) and tapping the chosen one keeps it (radio semantics, also
@@ -771,7 +782,9 @@ green for positive tags. No dark mode work. No images.
   outside the group is refused;
   `selectionValid(item: MenuItem, optionIds): boolean` (every group between `minChoices` and `maxChoices`, no unknown
   id, no id twice); `optionNames(item, optionIds): string[]` in the menu's order; `unitPrice(item, optionIds): number` (the price
-  plus the deltas, in cents).
+  plus the deltas, in cents); `groupHint(group: OptionGroup): string` (the grey line under a group's name on the
+  item page, §11.9: `minChoices === maxChoices` → "Choose n"; `minChoices === 0` → "Choose up to n"; otherwise
+  "Pick at least m, up to n").
 - `slots.ts`: `dayStrip(today: DayString, days = 7): DayString[]` (today and the next `days − 1` calendar days);
   `chip(slot: SlotAvailabilityDto): { label; disabled; hint: string | null }` with the hint per reason: `past` →
   "Already started", `cutoff` → "Too late to order", `too_soon` → "Too soon", `full` → "Full" (not bookable without
@@ -1163,6 +1176,252 @@ the OpenNext build copies `public/items/*` and the `_headers` rule into `.open-n
 active tab still reads Drinks, the scroll-spy's threshold (a section becomes active in the top 45 % of the
 viewport, the last one at the page's end).
 
+### 11.9 Design pass 4: the item page and motion (Anton's review, 2026-11-08)
+Anton's fourth review, after the photo tiles (§11.8): in the reference the tile's round "+" never puts food into
+the cart; it opens the item's page, and the page is where the item is added. Ours is to work the same way. While
+this pass was prepared he added one rule: **drinks go straight into the cart, no page, no details**, and once a
+drink is in the cart its round button becomes a small "−" / count / "+" pill (a third screenshot). He also asked
+for more motion across the app, planned with the motion skills. The numbers below were measured on 17 new
+screenshots (`reference/uber-eats-2/`, 1284 × 2778 at 3×) and one more (`reference/uber-eats-3/`, the drinks grid
+with the pill; a JPEG, so its edges are ±1); both folders are git-ignored and used for layout only. Values in CSS
+px; tokens, type styles and shapes are §11.7's unless a line here replaces one. Behaviour of the cart, pricing,
+the checkout and the API is unchanged.
+
+**Behaviour.**
+- One predicate decides, `quickAdds(item)` (§11.2 `menu.ts`): a drink (`kind: item`, `vatCategory: drink`) with no
+  required option group. The grid, the item page's rows and `upsellItems` all use it. No seed drink has groups.
+- **Quick-add items (the seed's three drinks).** The round "+" adds one at once through the store page's existing
+  `add(item, [], 1)` (the 30-line limit, the toast "Added <name>."). Tapping the tile (picture and text) does the
+  same: a drink has one action, add (Anton's rule; recorded as a decision he can flip, because a tile tap that
+  adds is unusual). Once the cart holds the drink, the round button is replaced in place by the **pill**: "−"
+  removes one through `removeOne` (at quantity 1 the line goes and the pill collapses back to the round "+"), the
+  number is `itemQuantity`, "+" adds one (disabled at 20, `addLine`'s cap; the tile tap at 20 adds nothing and
+  says "You can add up to 20."). "−" raises the toast "Removed <name>.". The tile tap stays "add one" while the
+  pill shows (the skills' objection, a large target that adds by accident, is answered by the toast and the
+  pill's "−"; the tile leaves the tab order, below, so keyboard users meet one control per drink).
+- **Every other item (food, combos, a drink that gains a required group).** The round button and the tile both
+  open the **item page**; nothing is quick-added. The round button keeps §11.7's look (the plus, or
+  `itemQuantity` once the cart holds the item). The page adds `quantity` of the item with the chosen options
+  through the same `add` (unchanged: `addLine` n times, the 30-line limit, the toast, the page closes).
+- A drink with only optional groups quick-adds without them (their choices are not offered anywhere; §16). A
+  drink that gains a required group opens the page like food; its page shows no "Add a drink" rows.
+- The browser's back button is not wired to the page (no history entry; §16). Escape, the X and the backdrop
+  (visible at `sm:`) close it.
+- The toast's place is fixed when it is raised: at the top (`top-4`) when the page stays open (a row's "+"),
+  otherwise at the bottom (`bottom-24` above the cart pill, `bottom-6` without it). Today it jumps when the page
+  closes under it.
+
+**The item page** (`ItemPage`, the former `OptionSheet`). A portal into `<body>`, `role="dialog"`,
+`aria-modal="true"`, `aria-labelledby` the title; focus to the close button on open, every other body child
+`inert` (except the live region, below), focus back to the opener after it unmounts; the page behind does not
+scroll (`overflow: hidden` on `body`, as now). On phones it is **full screen**: `fixed inset-0`, no top gap, no
+rounded corners. (The reference draws it as a sheet whose top edge sits 57 below the screen top with radius-10
+corners, the dimmed store showing in the status bar; in a browser that strip is the browser's own chrome, so ours
+starts at the top.) At `sm:` and up the centred panel stays: `max-w-md`, `max-h-[90dvh]`, radius 16, over the
+`bg-black/40` backdrop. Layout: a flex column of the scroller (`flex-1 overflow-y-auto overscroll-contain`,
+`scroll-padding-top: 56px` so a focused row never hides under the compact header) and the pinned bar; the close
+button and the compact header sit above the scroller (absolute, top of the dialog). Top to bottom:
+1. **Hero.** `Tile` size `hero`, 230 high, full bleed, photo under the notch.
+2. **Close button, one element.** The reference's round X (42 measured; ours 44) and its compact header's plain X
+   share one centre, 30 from the left and 28 from the top, so ours is **one** button that stays put: a 44 × 44
+   hit area at `left-2` and `top: calc(6px + env(safe-area-inset-top, 0px))`, the X icon 24 (stroke 2), name
+   "Close item". Behind the icon a decorative white circle (44, `shadow-[0_1px_6px_rgba(0,0,0,0.18)]`,
+   `aria-hidden`) that fades out when the compact header fades in. It does not scroll with the hero (the reference
+   keeps it pinned while the hero scrolls away). Replaces §11.7's "X at 8/8 in the hero".
+3. **Compact header.** 56 high plus the top safe-area inset (padding-top), white,
+   `shadow-[0_1px_6px_rgba(0,0,0,0.3)]` (measured: a soft shade fading out over about 9 px under the bar); the
+   title in `text-label-lg` (18/24 500: the reference's title has a 13 px cap height, the same size as the store
+   page's compact header, so not `text-body-strong`), centred in a box from 60 to the width − 60 (the 44 hit area
+   at 8, plus 8), **one line with an ellipsis** (`truncate`: the one truncation allowed, because the full title
+   sits below). `aria-hidden="true"` (it repeats the title). No share button. Appears when the title has scrolled
+   under it: an IntersectionObserver on the title with the scroller as `root` and `rootMargin: "-56px 0px 0px
+   0px"`; compact while the title is not intersecting and its top is above the root's top. Motion M3.
+4. **Title block** as §11.7 (padding 16 16 16: the title `text-title` margin-top 16, the price `text-price-lg`
+   margin-top 8, then margin-top 12 a 14/20 400 `ink-3` line). Our items have no description: the line is a
+   combo's components through `describe` ("Chicken Burger, Fries, Cola 0.33 l") and absent for an item without
+   one. No tags row (the reference's rating pills are its data).
+5. **Option groups** as §11.7 (a 4 px `line-2` band before each, padding 16 0, the heading `text-heading` with the
+   Required / Optional tag at the right, the hint `groupHint(group)` in `text-body-sm` `ink-2`, the rows 72 high
+   with 1 px `line-2` hairlines, the radio or checkbox at the right). No "Product info" links (we have none). An
+   item without groups has no group section.
+6. **Stepper** as §11.7: a 4 px `line-2` band, then padding 16 and the 130 × 36 `well` pill left-aligned (the
+   reference sets it at 12; ours stays on the 16 column), "−" in `mute` at 1, 1–20, the number in a polite live
+   region. When "Add a drink" follows, this white section ends in bottom corners of radius 20 over a `well`
+   area (measured: the reference switches from bands to white cards on `well` here).
+7. **"Add a drink"** when `upsellItems(menu, item)` is not empty: 20 of `well`, then a white card with radius 20
+   (measured 19–20 on the corner) and 20 of `well` below it to the end of the scroller. Inside: the heading
+   "Add a drink" in `text-heading`, padding 16 16 16; then one row per drink, 80 high (padding 16 0), from 16 at
+   the left to 16 at the right: a 48 × 48 `Tile`-photo with radius 8 (a new `Tile` size `row`), 16 gap, the name
+   `text-body-strong` (two lines at most) over the price `text-body-sm` `ink` (both left, vertically centred),
+   and at the right **the same control the grid gives a quick-add item**: the round button 36 (§11.7's
+   `roundButton`, shadow as the grid's) with the plus icon 16 (`size-4`; the reference's glyph is 11 wide)
+   while the cart holds none of the drink, the drink pill (below) once it does. 1 px `line-2` hairlines
+   between rows, running from the row's left edge (16) to the card's right edge; none under the last row;
+   the card has no bottom padding beyond the last row's. The round "+" adds one of that drink at once
+   (`add(drink, [], 1)`; the toast "Added <name>." at the top; the page stays open); the pill's "−" removes
+   one through `removeOne` (the toast "Removed <name>." at the top), its "+" adds another (disabled at
+   20). The row itself is not a button. Names as on the grid (below). (The orchestrator's call on the prep
+   agent's question: one control for a quick-add item everywhere, and an accidental add on the page can be
+   undone where it happened.)
+8. **Pinned bar.** White, a 2 px `line-2` rule on top (measured on every item-page screenshot; the store page's
+   bars keep §11.7's "no border"), padding 16 16 and `calc(12px + env(safe-area-inset-bottom, 0px))` below, the
+   56 primary button full width, "Add n to cart • total" as §11.7, disabled until the selection is valid (§16).
+Not in this pass (§16): "More to explore", "Ingredients", a note field, the allergy row, share.
+
+**The grid's controls** (§11.7's item card otherwise unchanged).
+- The round button's plus icon is **16** (`size-4`) everywhere (grid, rows): the reference's glyph measures 11 on
+  both new sets, which a 16 icon with stroke 2 draws; §11.7's 20 is replaced.
+- **The drink pill** (quick-add items with quantity > 0, on the grid and in the item page's rows): white, fully rounded, 40 high (measured 40–42), about 96
+  wide (padding 0 4: a 36 × 36 "−" button, the number, a 36 × 36 "+" button; the number `text-label` 14/20 500
+  `tabular-nums`, `min-w-4` centred; it widens a little for 10–20), `shadow-[0_1px_6px_rgba(0,0,0,0.18)]`,
+  anchored 8 from the tile's right and bottom edges like the round button; icons 16 (minus and plus, stroke 2),
+  `ink`; the "+" at 20 disabled in `mute`.
+- **Names (`better-accessibility`).** Per item exactly one tab stop group: the round button or the pill. The tile
+  button gets `tabIndex={-1}` for every item (pointer only; its function is on the round button) and keeps its
+  text as its name; a quick-add tile adds a visually hidden ", add one" after its text. Round button of a page
+  item: "Add <name>" (prefixed "<n> in cart. " as now) with `aria-haspopup="dialog"`, so screen readers say it
+  opens a dialog without a different wording. Round button of a quick-add item: "Add <name>". The pill:
+  `role="group"`, `aria-label="<name>, <n> in cart"`; "Remove one <name>" and "Add one <name>"; the number
+  `aria-hidden` (the group's name carries it; the toast announces each change).
+- **Focus when the controls swap.** If focus is on the round "+" when the pill replaces it, focus moves to the
+  pill's "+"; if focus is on the pill's "−" when it collapses, focus moves to the round "+". Only when focus was
+  inside the control (checked before the swap); otherwise focus stays where it is.
+- **Live region.** One always-mounted, visually hidden `role="status"` region (a portal into `<body>`, rendered
+  empty on mount, `data-live-region`) carries every toast text; the visible toast is `aria-hidden`. The item
+  page leaves `[data-live-region]` out when it marks the body's children `inert`. (Today the toast mounts with
+  its text, which screen readers may not announce.)
+
+**Motion.** The audit (`improve-animations`) ranked first: the page has no exit (it slides in over 300 ms and
+vanishes in one frame); the compact header's fade-out never plays (`invisible` hides it at once); the toast
+leaves in one frame; colour changes (hover, chips, slot cards, a button becoming enabled) jump; the tab segment
+jumps. Every decision below went through `animate` (should it move, purpose, tool, properties, curve, duration,
+interruption, exit). Limits kept from §11.7: transforms and opacity only (colour transitions at 150 ms), nothing
+over 300 ms except the toast's hold, every entrance and exit under `motion-safe:` with a plain fade or nothing
+under reduced motion, no `transition-all`, the same motion for keyboard and pointer, no dependencies. Three
+curves become theme tokens (`ease-*` utilities): `--ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1)` (entrances,
+exits, feedback), `--ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1)` (movement on screen), `--ease-drawer:
+cubic-bezier(0.32, 0.72, 0, 1)` (the page). Tailwind 4's `translate-*` and `scale-*` utilities set the CSS
+`translate` and `scale` properties, so keyframes animate `transform` and compose with them (the centred toast
+and cart pill keep `-translate-x-1/2`); a transition that must carry them lists `transform, translate, scale`.
+In this pass:
+1. **M1 Item page entrance.** Phone: the panel from `translate: 0 100%` to 0, 300 ms `ease-drawer`; the backdrop
+   opacity 0 → 1, 300 ms `ease-out-strong`. `sm:`: the panel from opacity 0 and `scale: 0.96` to 1, 250 ms
+   `ease-out-strong`, origin centre (a modal), backdrop as on phones. A CSS transition started by
+   `@starting-style` (Tailwind's `starting:` variant), not a keyframe, so a close during the entrance reverses
+   from where it is. Reduced motion: opacity 0 → 1 over 200 ms, no transform. No state. Purpose: spatial (the page
+   comes up over the store it belongs to).
+2. **M2 Item page exit (new).** Phone: the panel to `translate: 0 100%`, 200 ms `ease-drawer` (exits faster than
+   it enters); the backdrop to opacity 0, 200 ms. `sm:`: opacity 0 and `scale: 0.96`, 150 ms `ease-out-strong`.
+   Reduced motion: opacity 0 over 150 ms. **Needs state:** closing (X, Escape, backdrop, "Add n to cart") sets a
+   `closing` flag instead of unmounting; the dialog root gets `pointer-events-none` and ignores Escape, so nothing
+   fires twice; the parent unmounts the page on the panel's `transitionend` (its own event, property `translate`,
+   `scale` or `opacity`) or after a 300 ms fallback timeout, whichever comes first; the cleanup then removes
+   `inert` and only after that restores focus to the opener (focus cannot land in an inert subtree). The cart,
+   the toast and the cart pill update when "Add" is tapped, not when the exit ends.
+3. **M3 Compact header crossfade.** The header's opacity 0 ↔ 1 and the close button's white circle 1 ↔ 0, both
+   150 ms `ease-out-strong`, CSS transitions (scrolling back and forth retargets). Opacity only, so the same under
+   reduced motion. The hidden header is `pointer-events-none` and stays visible to the transition (no
+   `invisible`, which would cut the fade). The store page's compact header gets the same fix (drop `invisible`,
+   keep `pointer-events-none` and `aria-hidden`; it holds no control) and the same curve. Purpose: state.
+4. **M4 Count tick.** When a shown count changes after mount (the grid's round button going from plus to a
+   number or to a new number, the drink pill's number, the cart pill's count, the cover's cart badge, a row's
+   round button), the new content plays `count-tick`: from `transform: scale(0.8)` and opacity 0.5 to none,
+   150 ms `ease-out-strong`, keyed on the value so each change replays it. Not on first render (a stored cart
+   would make every badge jump at load): animate only once the value differs from the one at mount. A keyframe
+   on purpose: rapid taps restart it, and each restart is a new value, which is the feedback. Reduced motion:
+   none (the number itself changes). Purpose: feedback at the place of the tap. No state beyond a ref.
+5. **M5 Round "+" ↔ pill.** The control that appears enters by a transition from `@starting-style`: opacity 0
+   and `scale: 0.9` to 1, 150 ms `ease-out-strong`; the pill's origin is its right edge (it grows out of the
+   circle's spot), the circle's its centre. The control that leaves unmounts at once (the entering one covers
+   the same corner). Reduced motion: opacity only. No state. Purpose: state (the control changed role). Not a
+   width animation (layout) and not a `clip-path` reveal (it would clip the shadow).
+6. **M6 Cart pill entrance.** When the floating "View cart • n" pill mounts: from opacity 0 and `transform:
+   translateY(16px)` to none, 250 ms `ease-out-strong`, by `@starting-style`. The pill no longer unmounts while
+   the item page is open (the page covers it and it is inert with the rest), so it rises only when the cart goes
+   from empty to not empty, and once at load when a stored cart exists. No exit (it disappears only when the
+   cart empties through the pill's "−"; an exit needs state; §16). Reduced motion: opacity only. Purpose: spatial
+   (where the cart went).
+7. **M7 Toast, one keyframe over its life.** `toast` 2500 ms (`NOTICE_MS` and the CSS duration are one number;
+   say so in both places): 0 % opacity 0 and `translateY(8px)` (bottom placement) or `translateY(-8px)` (top,
+   `toast-top`); 8 % (200 ms) opacity 1, no offset; 92 % the same; 100 % opacity 0 and the start offset; timing
+   `ease-out-strong` per segment. The timer unmounts it at 2500 ms, when the animation has ended: no state.
+   Reduced motion: `toast-fade`, the same timings with opacity only. A new toast replaces the old one (keyed, it
+   restarts), never stacks, so the skills' "transitions for toasts" (for stacks that retarget) does not apply.
+   Purpose: feedback; the exit stops the one-frame vanish.
+8. **M8 Radio and checkbox.** The radio's 8 px dot is always rendered: unchosen `scale: 0.5` and opacity 0,
+   chosen `scale: 1` and opacity 1; the ring's colour `ink-3` → `ink`; the checkbox's fill transparent → `ink` and
+   its check from `scale: 0.5`, opacity 0. All CSS transitions, 150 ms `ease-out-strong` (colours included).
+   Reduced motion: opacity and colour only. The same for a tap, an arrow key or Space. Purpose: state.
+9. **M9 Tab segment slides.** The `ink` segment under the active tab becomes one 5 px bar in the tab row,
+   positioned with `transform: translateX(<left>px) scaleX(<width / 100>)` on a 100 px wide bar with origin left,
+   transition 250 ms `ease-in-out-strong`; the labels' colour 150 ms. Measuring costs one read of the active
+   button's `offsetLeft` and `offsetWidth` per change of the active tab (the scroll-spy's few changes per
+   scroll, never per scroll event) and on a ResizeObserver of the tab row (the font swapping in, rotation). The
+   first placement has no transition (a `ready` flag adds the class after the first paint). Reduced motion: no
+   transition on the bar. Purpose: spatial (which section you are in, and which way you moved).
+10. **M10 Colour transitions.** `press` (`ui.ts`) becomes `transition-[transform,translate,scale,color,
+    background-color,border-color,box-shadow] duration-150 ease-out not-disabled:active:scale-[0.97]`, so
+    hovers, the day chips (`well` → `ink`), the slot cards' border and ring, the pills' hover and a primary
+    button becoming enabled change over 150 ms instead of jumping. The press itself is unchanged. Colour is not
+    movement: the same under reduced motion. Purpose: preventing a jarring change.
+11. **M11 Status progress fill.** Each reached segment's `ink` fill is an inner bar with origin left, from
+    `scale: 0 1` (by `@starting-style`) to `scale: 1 1`, 300 ms `ease-out-strong`, the second and third 80 ms
+    after the one before; a segment reached while the page polls (paid → ready) fills the same way. A progress
+    fill is the one place a scale starts from 0 (it is a bar growing, not an object appearing). Reduced motion:
+    no transition. Purpose: state and a rare moment (the order is paid).
+12. **M12 QR card.** When the SVG arrives, its box enters from opacity 0 and `scale: 0.97` to 1, 250 ms
+    `ease-out-strong`, by `@starting-style`. Reduced motion: opacity only. Purpose: preventing a jarring change
+    (the code pops in after an async render).
+
+Dropped or deferred, with the reason: the checkout's expanding rows (only a height animation would help, which is
+layout); the steppers' number (frequent, and the live region already speaks); hover scale or lift effects
+(decorative on frequent targets); a stagger on the grid (a page visited often); a parallax or stretch on the
+hero (scroll-linked decoration); drag-to-dismiss on the page (a gesture needs velocity tracking; §16); exits for
+the cart pill and the drink pill (state for a rare moment; §16); route transitions (Next's view transitions need
+a config flag; §16). `--animate-sheet-up` and the backdrop's `animate-fade-in` give way to M1/M2;
+`--animate-fade-in` may stay for anything else that uses it.
+
+**Mobile and access (`mobile-native`, `better-accessibility`).** `fixed inset-0` tracks the visible viewport (no
+`100vh`); the top inset pads the close button and the compact header, the bottom inset the pinned bar; the
+scroller is `overscroll-behavior: contain`; buttons keep §11.7's `touch-action: manipulation` and `user-select:
+none`, so fast taps on the pill's "+" never zoom; the pill's 36 px buttons and the 44 close target clear 2.5.8;
+focus stays visible above the compact header through `scroll-padding-top`. To check on a phone: the safe areas
+in landscape, the drawer curve, the crossfade, that fast taps on "+" register each tap.
+
+**Decisions of the pass (the implementer's report, 2026-11-08).** The sheet is `ItemPage.tsx`; the quick-add
+control (the round "+" or the pill) is one component, `QuickAddControl`, on the grid and in the rows; the count
+tick is `Count` (keyed on the value; the value it mounted with never animates); `Tile` gained the `row` size (48,
+radius 8); `ui.ts` gained `roundSurface` (the round look without its motion) and `stepButton`; `sheet-up` and
+`fade-in` left the theme (nothing used them). Departures, accepted: (1) "Add n to cart" on a full cart (the
+30-line limit) keeps the page open and puts "Your cart is full." at the top (`onAdd` answers false); this section
+had described only the success path. (2) The pill keeps `role="group"` under a `biome-ignore`
+(`useSemanticElements` wants a `<fieldset>`, whose box quirks do not suit a 40 px inline pill). (3) The round "+"
+and the pill play their M5 entrance only after a swap, never at first mount (otherwise every drink control would
+fade in at load and on each page open), the same rule as M4's. (4) With drinks, the whole scroller is `well` and
+the content above the rows sits on a white wrapper, so the well runs to the scroller's end on short pages
+(Coleslaw) without a fragile min-height. (5) The cart pill does not use `press` (two `transition-[…]` lists would
+conflict): its own 250 ms list with `not-disabled:active:scale-[0.97]` and `active:duration-150`, so the press
+takes 150 ms and the release 250 ms. (6) Under reduced motion at `sm:` the entrance fade lasts 250 ms, not 200
+(`sm:duration-250` wins over `motion-reduce:duration-200` in the compiled order); the exit is 150 ms either way.
+Verified headless (DevTools, real key events): Enter on a drink's round "+" moves focus to the pill's "+", Enter
+on its "−" at 1 moves it back; the page focuses "Close item", the cart pill is mounted and inert beneath it, the
+live region is not inert; after Escape the dialog stays through the exit, then unmounts with focus back on the
+opener and no `inert` left; the tab segment moves with its transition on. Noticed, unchanged: the scroll-spy's
+threshold (§11.8). Checks: core 373, web 275 (238 + 37), API 287, typecheck, Biome, `next build`, the OpenNext
+build; the greps clean with the one `truncate`. Still for the phone: the safe areas, the drawer curve, the
+crossfade, fast taps on "+".
+
+**Decisions.** A full-screen page over the store rather than a route: the cart, the scroll position and the
+scroll-spy stay put, the photo and the groups are already in the menu the page has, and a route would need a
+loading state and a back-button contract (§16). Drinks as the one upsell list because it is data-driven
+(`upsellItems` over the Drinks section); no seed change and no new menu field in this pass. Drinks are added at
+once wherever they appear (the grid, the rows) because Anton asked for no details on drinks; the tile tap that
+adds is his call and can be flipped to "nothing" or "open the page" without touching the library. The drink
+pill on the grid and in the rows: the same control for a quick-add item everywhere. One close button instead of two, because the reference's
+two X's share a centre. The compact header's title at 18 and the pinned bar's 2 px rule are measured, not
+assumed. Later (§16): the "Complete your order" page after the cart, a note field on a line, "More to explore",
+the ingredients accordion, share. The brief: `docs/handoffs/m6-item-page-impl.md`.
+
 ## 12. Errors
 
 | Code | HTTP | Where |
@@ -1286,6 +1545,13 @@ git-ignored; nothing in the committed repo names the company this was written fo
   sheet closing on Escape and locking the page's scroll; hiding today's slots that have already started (late in
   the day every past chip says "Already started"); a status word for an open day with no bookable slot left
   ("Over"); a busy state on the staff board's buttons while a request runs.
+- From the item page reference (§11.9), left out of design pass 4: a "Complete your order" upsell page between the
+  cart and the checkout (a grid of extras with round "+" buttons and a "No thanks" button); a note field on a line
+  ("Special instructions", needs a `note` in core's `CartLine`, the API and the order); a "More to explore"
+  carousel of other items under the item page's rows; an "Ingredients" accordion (needs ingredient data); a share
+  button on the item page (needs a URL per item); the browser's back button closing the item page (a history
+  entry per open page); drag-to-dismiss on the item page; the item page's optional groups for a quick-added drink
+  (a drink with only optional groups is added without them, §11.9); the cart pill's and the drink pill's exit animations (they need state); route transitions.
 
 ## 17. Research notes
 

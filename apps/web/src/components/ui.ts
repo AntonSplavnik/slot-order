@@ -4,8 +4,10 @@
 const focus =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2";
 
-/** Press feedback on every pressable (§11.7 Motion): a 150 ms ease-out scale to 0.97, never on a disabled one. */
-export const press = "transition-transform duration-150 ease-out not-disabled:active:scale-[0.97]";
+/** Press feedback on every pressable (§11.7 Motion): a 150 ms ease-out scale to 0.97, never on a disabled one; the
+ * same 150 ms carries hover and state colours (§11.9 M10), so they change instead of jumping. */
+export const press =
+  "transition-[transform,translate,scale,color,background-color,border-color,box-shadow] duration-150 ease-out not-disabled:active:scale-[0.97]";
 
 const button = `inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed ${press} ${focus}`;
 
@@ -27,8 +29,15 @@ export const linkButton = `inline-flex min-h-11 items-center rounded-lg text-lab
 /** A grey pill (Add items, Refresh): 36 high, `well`, padding 0 16, 14/20 500. */
 export const pillButton = `inline-flex h-9 items-center gap-1.5 rounded-full bg-well px-4 text-label text-ink hover:bg-tag ${press} ${focus}`;
 
-/** A round white button with a soft shadow (over tiles, the cover and the sheet's hero). */
-export const roundButton = `grid place-items-center rounded-full bg-white text-ink shadow-[0_1px_6px_rgba(0,0,0,0.18)] ${press} ${focus}`;
+/** The round white surface with a soft shadow, without its motion (the quick-add control brings its own, §11.9 M5). */
+export const roundSurface =
+  "grid place-items-center rounded-full bg-white text-ink shadow-[0_1px_6px_rgba(0,0,0,0.18)]";
+
+/** A round white button with a soft shadow (over tiles and the cover). */
+export const roundButton = `${roundSurface} ${press} ${focus}`;
+
+/** A 36 × 36 round button inside a stepper pill (the item page's stepper, the drink pill). */
+export const stepButton = `grid size-9 place-items-center rounded-full text-ink disabled:text-mute ${press} ${focus}`;
 
 /** A white card with a hairline border, radius 12. */
 export const card = "rounded-xl border border-line bg-white";

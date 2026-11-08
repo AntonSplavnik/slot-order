@@ -18,10 +18,12 @@ export function tilePositions(menu: PublicMenu): Map<string, number> {
 const SIZE = {
   /** The menu grid: square, radius 12, the glyph at text-6xl (a photo fills the box). */
   grid: "aspect-square w-full rounded-xl text-6xl",
-  /** The hero across the top of the item sheet: 230 high, the glyph at text-8xl. */
+  /** The hero across the top of the item page: 230 high, full bleed, the glyph at text-8xl. */
   hero: "h-[230px] w-full text-8xl",
   /** A cart line: 72 square, radius 12. */
   line: "size-18 shrink-0 rounded-xl text-4xl",
+  /** An "Add a drink" row on the item page (§11.9): 48 square, radius 8. */
+  row: "size-12 shrink-0 rounded-lg text-3xl",
 } as const;
 
 export function Tile({

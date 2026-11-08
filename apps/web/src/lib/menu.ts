@@ -26,3 +26,27 @@ export function menuSections(menu: PublicMenu): MenuSection[] {
 export function itemById(menu: PublicMenu, id: string): MenuItem | undefined {
   return menu.items.find((i) => i.id === id);
 }
+
+/**
+ * Whether the item goes into the cart at once from its round "+" (§11.2, §11.9): a drink (`kind: item`,
+ * `vatCategory: drink`) without a required option group (none with `minChoices > 0`). Everything else opens
+ * the item page. The grid and `upsellItems` share it.
+ */
+export function quickAdds(item: MenuItem): boolean {
+  return (
+    item.kind === "item" &&
+    item.vatCategory === "drink" &&
+    !item.optionGroups.some((group) => group.minChoices > 0)
+  );
+}
+
+/**
+ * The item page's "Add a drink" rows (§11.2, §11.9): for an item that is not a drink, the Drinks section's
+ * items (active, in `sort` order, as `menuSections` gives them) that `quickAdds`; for a drink, `[]`; never the
+ * item itself. The menu's own item objects, not copies.
+ */
+export function upsellItems(menu: PublicMenu, item: MenuItem): MenuItem[] {
+  if (item.kind === "item" && item.vatCategory === "drink") return [];
+  const drinks = menuSections(menu).find((section) => section.id === "drinks");
+  return (drinks?.items ?? []).filter((drink) => quickAdds(drink) && drink.id !== item.id);
+}

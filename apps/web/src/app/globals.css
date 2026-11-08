@@ -1,6 +1,7 @@
-/* docs/design.md §11.3, §11.7: Tailwind 4, utility classes only. §11.7's sampled colours, its named type scale
- * (unitless line-heights) and the two motions are theme tokens here, used as `bg-ink`, `text-title`,
- * `animate-sheet-up` …; the base layer is the mobile baseline of §11.7's design-skill review. */
+/* docs/design.md §11.3, §11.7, §11.9: Tailwind 4, utility classes only. §11.7's sampled colours, its named type
+ * scale (unitless line-heights) and §11.9's curves and keyframes are theme tokens here, used as `bg-ink`,
+ * `text-title`, `ease-drawer`, `animate-toast` …; the base layer is the mobile baseline of §11.7's design-skill
+ * review. */
 @import "tailwindcss";
 
 @theme {
@@ -65,25 +66,70 @@
   --text-code--font-weight: 700;
   --text-code--letter-spacing: 0.12em;
 
-  /* Motion (§11.7): the sheet on the iOS drawer curve, fades opacity only. */
-  --animate-sheet-up: sheet-up 300ms cubic-bezier(0.32, 0.72, 0, 1);
-  --animate-fade-in: fade-in 200ms ease-out;
+  /* Motion (§11.9): three curves as `ease-*` utilities, the toast's one keyframe over its life and the count
+   * tick. Keyframes animate `transform`, so they compose with Tailwind's `translate` / `scale` properties. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 2500 ms = NOTICE_MS in src/app/page.tsx: the timer unmounts the toast when its animation ends. */
+  --animate-toast: toast 2500ms var(--ease-out-strong) both;
+  --animate-toast-top: toast-top 2500ms var(--ease-out-strong) both;
+  --animate-toast-fade: toast-fade 2500ms var(--ease-out-strong) both;
+  --animate-count-tick: count-tick 150ms var(--ease-out-strong);
 
-  @keyframes sheet-up {
-    from {
-      transform: translateY(100%);
+  @keyframes toast {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
     }
-    to {
-      transform: translateY(0);
+    8%,
+    92% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(8px);
     }
   }
 
-  @keyframes fade-in {
-    from {
+  @keyframes toast-top {
+    0% {
       opacity: 0;
+      transform: translateY(-8px);
+    }
+    8%,
+    92% {
+      opacity: 1;
+      transform: none;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+
+  @keyframes toast-fade {
+    0% {
+      opacity: 0;
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes count-tick {
+    from {
+      opacity: 0.5;
+      transform: scale(0.8);
     }
     to {
       opacity: 1;
+      transform: none;
     }
   }
 }
